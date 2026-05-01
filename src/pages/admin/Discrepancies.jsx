@@ -2,24 +2,38 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function Discrepancies() {
-  const { apiFetch } = useAuth();
+  const { supabase, user } = useAuth();
   const [discrepancies, setDiscrepancies] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [resolveId, setResolveId] = useState(null);
   const [resolution, setResolution] = useState('');
+  const [refresh, setRefresh] = useState(0);
 
-  const load = () => {
-    const params = new URLSearchParams();
-    if (statusFilter) params.set('status', statusFilter);
-    apiFetch(`/reconciliation/discrepancies?${params}`).then(r => r.json()).then(setDiscrepancies);
-  };
-  useEffect(load, [statusFilter, apiFetch]);
+  useEffect(() => {
+    async function load() {
+      let q = supabase.from('discrepancies').select('*').order('created_at', { ascending: false });
+      if (statusFilter) q = q.eq('status', statusFilter);
+      const { data } = await q;
+      if (data) {
+        setDiscrepancies(data.map(d => ({ ...d, createdAt: d.created_at })));
+      }
+    }
+    load();
+  }, [statusFilter, refresh, supabase]);
 
   const handleResolve = async () => {
-    await apiFetch(`/reconciliation/discrepancies/${resolveId}/resolve`, { method: 'POST', body: JSON.stringify({ resolution }) });
+    await supabase.from('discrepancies')
+      .update({ 
+        status: 'resolved', 
+        resolution, 
+        resolved_at: new Date().toISOString(),
+        resolved_by: user?.id 
+      })
+      .eq('id', resolveId);
+      
     setResolveId(null);
     setResolution('');
-    load();
+    setRefresh(r => r + 1);
   };
 
   const openCount = discrepancies.filter(d => d.status === 'open').length;

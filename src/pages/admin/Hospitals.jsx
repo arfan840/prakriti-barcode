@@ -2,35 +2,43 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function Hospitals() {
-  const { apiFetch } = useAuth();
+  const { supabase } = useAuth();
   const [hospitals, setHospitals] = useState([]);
   const [districts, setDistricts] = useState([]);
   const [filters, setFilters] = useState({ district: '', type: '', search: '' });
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', type: 'Bedded', beds: '', district: '', address: '', contact: '' });
   const [editId, setEditId] = useState(null);
+  const [refresh, setRefresh] = useState(0);
 
-  const load = () => {
-    const params = new URLSearchParams();
-    if (filters.district) params.set('district', filters.district);
-    if (filters.type) params.set('type', filters.type);
-    if (filters.search) params.set('search', filters.search);
-    apiFetch(`/hospitals?${params}`).then(r => r.json()).then(setHospitals);
-    apiFetch('/hospitals/districts').then(r => r.json()).then(setDistricts);
-  };
-  useEffect(load, [filters, apiFetch]);
+  useEffect(() => {
+    async function load() {
+      let query = supabase.from('hospitals').select('*').order('created_at', { ascending: false });
+      if (filters.district) query = query.eq('district', filters.district);
+      if (filters.type) query = query.eq('type', filters.type);
+      if (filters.search) query = query.ilike('name', `%${filters.search}%`);
+      
+      const { data } = await query;
+      if (data) setHospitals(data);
+
+      const { data: dData } = await supabase.from('hospitals').select('district');
+      if (dData) setDistricts([...new Set(dData.map(d => d.district))].filter(Boolean));
+    }
+    load();
+  }, [filters, refresh, supabase]);
 
   const handleSave = async (e) => {
     e.preventDefault();
+    const payload = { ...form, beds: Number(form.beds) || null };
     if (editId) {
-      await apiFetch(`/hospitals/${editId}`, { method: 'PUT', body: JSON.stringify(form) });
+      await supabase.from('hospitals').update(payload).eq('id', editId);
     } else {
-      await apiFetch('/hospitals', { method: 'POST', body: JSON.stringify(form) });
+      await supabase.from('hospitals').insert([payload]);
     }
     setShowModal(false);
     setEditId(null);
     setForm({ name: '', type: 'Bedded', beds: '', district: '', address: '', contact: '' });
-    load();
+    setRefresh(r => r + 1);
   };
 
   const handleEdit = (h) => {

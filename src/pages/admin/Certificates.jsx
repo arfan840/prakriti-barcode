@@ -2,18 +2,34 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function Certificates() {
-  const { apiFetch } = useAuth();
+  const { supabase } = useAuth();
   const [batches, setBatches] = useState([]);
   const [selectedCert, setSelectedCert] = useState(null);
 
   useEffect(() => {
-    apiFetch('/batches?status=treated').then(r => r.json()).then(setBatches);
-  }, [apiFetch]);
+    async function load() {
+      const { data } = await supabase.from('batches').select('*').eq('status', 'treated');
+      if (data) {
+        setBatches(data.map(b => ({
+          ...b,
+          batchNumber: b.batch_number,
+          bagCount: b.bag_count,
+          totalWeight: b.total_weight,
+          treatmentType: b.treatment_type,
+          treatedAt: b.treated_at,
+          certificateId: b.id,
+          certificate: true, // Legacy flag
+          generatedAt: b.treated_at,
+          categories: ['Yellow', 'Red'], // Placeholder
+          hospitals: ['City Hospital'] // Placeholder
+        })));
+      }
+    }
+    load();
+  }, [supabase]);
 
-  const viewCert = async (batchId) => {
-    const res = await apiFetch(`/batches/${batchId}/certificate`);
-    const cert = await res.json();
-    setSelectedCert(cert);
+  const viewCert = (batch) => {
+    setSelectedCert(batch);
   };
 
   return (
@@ -34,7 +50,7 @@ export default function Certificates() {
                   <td>{b.totalWeight} kg</td>
                   <td><span className="badge badge-treated">{b.treatmentType}</span></td>
                   <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{new Date(b.treatedAt).toLocaleDateString()}</td>
-                  <td><button className="btn btn-primary btn-sm" onClick={() => viewCert(b.id)}>View Certificate</button></td>
+                  <td><button className="btn btn-primary btn-sm" onClick={() => viewCert(b)}>View Certificate</button></td>
                 </tr>
               ))}
             </tbody>

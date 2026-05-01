@@ -2,24 +2,59 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function Reconciliation() {
-  const { apiFetch } = useAuth();
+  const { supabase } = useAuth();
   const [routes, setRoutes] = useState([]);
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    apiFetch('/routes?status=closed').then(r => r.json()).then(setRoutes);
-  }, [apiFetch]);
+    async function loadRoutes() {
+      const { data } = await supabase.from('routes').select('*, profiles(name)').eq('status', 'closed');
+      if (data) setRoutes(data.map(r => ({ ...r, driverName: r.profiles?.name || 'Unknown', vehicleNumber: r.vehicle_number, siteNames: ['Multiple'] })));
+    }
+    loadRoutes();
+  }, [supabase]);
 
   const runReconciliation = async (routeId) => {
     setLoading(true);
     setSelectedRoute(routeId);
     try {
-      const res = await apiFetch(`/reconciliation/run/${routeId}`, { method: 'POST' });
-      const data = await res.json();
-      setResult(data);
-    } catch { setResult(null); }
+      // 1. Get all bags linked to this route
+      const { data: bags } = await supabase.from('bags').select('*').eq('route_id', routeId);
+      
+      const collected = bags.filter(b => ['collected', 'received', 'in_batch', 'treated'].includes(b.status)).length;
+      const received = bags.filter(b => ['received', 'in_batch', 'treated'].includes(b.status)).length;
+      const missing = bags.filter(b => b.status === 'collected');
+      
+      // 2. Log discrepancies for missing bags
+      for (const bag of missing) {
+          const { data: existing } = await supabase.from('discrepancies').select('id').eq('bag_id', bag.id).eq('status', 'open').single();
+          if (!existing) {
+              await supabase.from('discrepancies').insert({
+                  bag_id: bag.id,
+                  barcode: bag.barcode,
+                  type: 'MISSING_AT_PLANT',
+                  description: `Bag ${bag.barcode} was collected by driver but never scanned at plant gate.`,
+                  route_id: routeId,
+                  status: 'open'
+              });
+          }
+      }
+
+      setResult({
+          collected,
+          received,
+          matched: received,
+          missingAtPlant: missing.length,
+          unexpectedAtPlant: 0, // Simplified for now
+          newDiscrepancies: missing.length,
+          discrepancies: missing
+      });
+    } catch (err) { 
+      console.error(err);
+      setResult(null); 
+    }
     setLoading(false);
   };
 

@@ -2,32 +2,43 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function DriverWeigh() {
-  const { apiFetch } = useAuth();
+  const { supabase, user } = useAuth();
   const [barcode, setBarcode] = useState('');
   const [weight, setWeight] = useState('');
   const [bag, setBag] = useState(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [activeRouteId, setActiveRouteId] = useState(null);
+
+  useEffect(() => {
+    async function getRoute() {
+      if (!user) return;
+      const { data } = await supabase.from('routes').select('id').eq('driver_id', user.id).eq('status', 'active').limit(1).single();
+      if (data) setActiveRouteId(data.id);
+    }
+    getRoute();
+  }, [supabase, user]);
 
   const lookupBag = async (e) => {
     e.preventDefault();
     setError('');
     setBag(null);
     setSaved(false);
-    const res = await apiFetch('/bags/scan', { method: 'POST', body: JSON.stringify({ barcode }) });
-    if (!res.ok) { setError('Bag not found'); return; }
-    const data = await res.json();
-    setBag(data);
-    setWeight(data.weight?.toString() || '');
+    const { data: bg, error: fetchErr } = await supabase.from('bags').select('*, hospitals(name)').eq('barcode', barcode).single();
+    if (fetchErr || !bg) { setError('Bag not found'); return; }
+    setBag({ ...bg, hospitalName: bg.hospitals?.name || bg.hospital_name });
+    setWeight(bg.weight?.toString() || '');
   };
 
   const saveWeight = async () => {
     if (!bag || !weight) return;
-    await apiFetch(`/bags/${bag.id}/collect`, {
-      method: 'POST',
-      body: JSON.stringify({ weight: parseFloat(weight) })
-    });
+    await supabase.from('bags').update({ 
+        weight: parseFloat(weight),
+        route_id: activeRouteId 
+    }).eq('id', bag.id);
     setSaved(true);
+    
+    supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'WEIGHT_UPDATED', entity: 'BAG', entity_id: bag.id, details: `Weight set to ${weight} kg` }).then();
   };
 
   return (

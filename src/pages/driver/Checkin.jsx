@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function DriverCheckin() {
-  const { apiFetch } = useAuth();
+  const { supabase, user } = useAuth();
   const [gps, setGps] = useState(null);
   const [loading, setLoading] = useState(false);
   const [checkedIn, setCheckedIn] = useState(false);
@@ -32,6 +32,13 @@ export default function DriverCheckin() {
 
   const handleCheckin = () => {
     setCheckedIn(true);
+    supabase.from('audit_logs').insert({ 
+        user_id: user?.id, 
+        user_name: user?.name, 
+        action: 'GPS_CHECKIN', 
+        entity: 'LOCATION', 
+        details: `Checked in at ${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}` 
+    }).then();
   };
 
   return (

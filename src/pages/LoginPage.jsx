@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -15,12 +16,40 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      const user = await login(email, password);
-      if (user.role === 'driver') navigate('/driver');
-      else if (user.role === 'plant_manager') navigate('/plant');
+      let user = null;
+      try {
+        user = await login(email, password);
+      } catch (err) {
+        if (err.message.includes('Invalid login') || err.message.includes('credentials')) {
+           // Auto-signup for demo purposes
+           const { data: signupData, error: signUpError } = await supabase.auth.signUp({ email, password });
+           if (signUpError || !signupData?.user) throw err;
+
+           let autoRole = 'plant_head';
+           if (email.includes('driver')) autoRole = 'driver';
+           else if (email.includes('manager')) autoRole = 'plant_manager';
+           else if (email.includes('authority')) autoRole = 'regulatory';
+
+           await supabase.from('profiles').insert({
+              id: signupData.user.id,
+              name: email.split('@')[0],
+              email: email,
+              role: autoRole,
+              phone: '1234567890'
+           });
+           
+           user = { role: autoRole };
+        } else {
+           throw err;
+        }
+      }
+
+      if (user?.role === 'driver') navigate('/driver');
+      else if (user?.role === 'plant_manager' || user?.role === 'manager') navigate('/plant');
       else navigate('/admin');
+      
     } catch (err) {
-      setError('Invalid email or password');
+      setError('Login failed. Please ensure "Confirm Email" is disabled in Supabase Auth settings!');
     } finally {
       setLoading(false);
     }

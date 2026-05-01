@@ -6,25 +6,74 @@ const COLORS = ['#fbbf24', '#f87171', '#60a5fa', '#e5e7eb'];
 const CATEGORY_COLORS = { Yellow: '#fbbf24', Red: '#f87171', Blue: '#60a5fa', White: '#e5e7eb' };
 
 export default function Dashboard() {
-  const { apiFetch } = useAuth();
+  const { supabase } = useAuth();
   const [stats, setStats] = useState(null);
   const [trends, setTrends] = useState([]);
   const [reconSummary, setReconSummary] = useState(null);
   const [treatmentStats, setTreatmentStats] = useState(null);
 
   useEffect(() => {
-    Promise.all([
-      apiFetch('/bags/stats').then(r => r.json()),
-      apiFetch('/reports/collection-trends').then(r => r.json()),
-      apiFetch('/reconciliation/summary').then(r => r.json()),
-      apiFetch('/reports/treatment-stats').then(r => r.json()),
-    ]).then(([s, t, r, tr]) => { setStats(s); setTrends(t); setReconSummary(r); setTreatmentStats(tr); });
-  }, [apiFetch]);
+    async function fetchData() {
+      // 1. Fetch all Bags for Stats & Trends
+      const { data: bags } = await supabase.from('bags').select('*');
+      if (bags) {
+        const today = new Date().toISOString().split('T')[0];
+        setStats({
+          total: bags.length,
+          todayBags: bags.filter(b => b.created_at?.startsWith(today)).length,
+          totalWeight: Number(bags.reduce((s, b) => s + (b.weight || 0), 0).toFixed(2)),
+          byCategory: bags.reduce((acc, b) => { acc[b.category] = (acc[b.category]||0)+1; return acc; }, {}),
+          byStatus: bags.reduce((acc, b) => { acc[b.status] = (acc[b.status]||0)+1; return acc; }, {})
+        });
+
+        // Compute 30 day trends
+        const tMap = {};
+        for(let i=29; i>=0; i--){
+          const d = new Date(); d.setDate(d.getDate()-i);
+          tMap[d.toISOString().split('T')[0]] = { bags: 0, weight: 0 };
+        }
+        bags.forEach(b => {
+          const d = b.created_at?.split('T')[0];
+          if(tMap[d]) { tMap[d].bags++; tMap[d].weight += (b.weight||0); }
+        });
+        setTrends(Object.entries(tMap).map(([k,v]) => ({ date: k, bags: v.bags, weight: Number(v.weight.toFixed(2)) })));
+      }
+
+      // 2. Fetch Discrepancies
+      const { data: discs } = await supabase.from('discrepancies').select('*');
+      if (discs) {
+        setReconSummary({
+          total: discs.length,
+          open: discs.filter(d => d.status === 'open').length,
+          resolved: discs.filter(d => d.status === 'resolved').length
+        });
+      }
+
+      // 3. Fetch Batches
+      const { data: batches } = await supabase.from('batches').select('*');
+      if (batches) {
+        const treated = batches.filter(b => b.status === 'treated');
+        const byType = {};
+        treated.forEach(b => {
+          const bt = b.treatment_type || 'Unknown';
+          if(!byType[bt]) byType[bt] = { bags: 0, weight: 0 };
+          byType[bt].bags += (b.bag_count || 0);
+          byType[bt].weight += Number((b.total_weight || 0).toFixed(2));
+        });
+        setTreatmentStats({
+          treatedBatches: treated.length,
+          pendingBatches: batches.length - treated.length,
+          byType
+        });
+      }
+    }
+    fetchData();
+  }, [supabase]);
 
   if (!stats) return <div className="loading-spinner" />;
 
-  const categoryData = Object.entries(stats.byCategory).map(([name, count]) => ({ name, value: count }));
-  const statusData = Object.entries(stats.byStatus).map(([name, count]) => ({ name: name.replace('_', ' '), count }));
+  const categoryData = Object.entries(stats.byCategory || {}).map(([name, count]) => ({ name, value: count }));
+  const statusData = Object.entries(stats.byStatus || {}).map(([name, count]) => ({ name: name.replace('_', ' '), count }));
 
   return (
     <div className="slide-up">

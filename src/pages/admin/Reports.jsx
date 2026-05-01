@@ -5,21 +5,55 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 const COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#f59e0b', '#10b981', '#ef4444', '#f87171', '#60a5fa'];
 
 export default function Reports() {
-  const { apiFetch } = useAuth();
+  const { supabase } = useAuth();
   const [data, setData] = useState(null);
   const [filters, setFilters] = useState({ from: '', to: '', district: '', hospitalType: '', category: '' });
   const [districts, setDistricts] = useState([]);
 
   useEffect(() => {
-    apiFetch('/hospitals/districts').then(r => r.json()).then(setDistricts);
-  }, [apiFetch]);
+    async function init() {
+      const { data: dData } = await supabase.from('hospitals').select('district');
+      if (dData) setDistricts([...new Set(dData.map(d => d.district))].filter(Boolean));
+    }
+    init();
+  }, [supabase]);
 
-  const load = () => {
-    const params = new URLSearchParams();
-    Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
-    apiFetch(`/reports/waste-summary?${params}`).then(r => r.json()).then(setData);
-  };
-  useEffect(load, [filters, apiFetch]);
+  useEffect(() => {
+    async function load() {
+      let q = supabase.from('bags').select('*, hospitals!inner(district, type)');
+      if (filters.category) q = q.eq('category', filters.category);
+      if (filters.district) q = q.eq('hospitals.district', filters.district);
+      if (filters.hospitalType) q = q.eq('hospitals.type', filters.hospitalType);
+      if (filters.from) q = q.gte('created_at', filters.from);
+      if (filters.to) q = q.lte('created_at', filters.to + 'T23:59:59Z');
+
+      const { data: bags } = await q;
+      if (bags) {
+        const res = { totalBags: bags.length, totalWeight: 0, byCategory: {}, byDistrict: {}, byMonth: {}, byHospital: {} };
+        bags.forEach(b => {
+           res.totalWeight += b.weight || 0;
+           if (!res.byCategory[b.category]) res.byCategory[b.category] = { count: 0, weight: 0 };
+           res.byCategory[b.category].count++;
+           res.byCategory[b.category].weight += Math.round(b.weight);
+
+           const d = b.hospitals.district;
+           if (!res.byDistrict[d]) res.byDistrict[d] = { count: 0, weight: 0 };
+           res.byDistrict[d].count++; res.byDistrict[d].weight += Math.round(b.weight);
+
+           const mo = b.created_at.substring(0,7);
+           if (!res.byMonth[mo]) res.byMonth[mo] = { count: 0, weight: 0 };
+           res.byMonth[mo].count++; res.byMonth[mo].weight += Math.round(b.weight);
+
+           const hn = b.hospital_name;
+           if (!res.byHospital[hn]) res.byHospital[hn] = { count: 0, weight: 0 };
+           res.byHospital[hn].count++; res.byHospital[hn].weight += Math.round(b.weight);
+        });
+        res.totalWeight = Number(res.totalWeight.toFixed(2));
+        setData(res);
+      }
+    }
+    load();
+  }, [filters, supabase]);
 
   if (!data) return <div className="loading-spinner" />;
 

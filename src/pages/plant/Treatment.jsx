@@ -4,20 +4,46 @@ import { useAuth } from '../../context/AuthContext';
 const TREATMENT_TYPES = ['Autoclaving', 'Incineration', 'Chemical Disinfection', 'Microwaving'];
 
 export default function Treatment() {
-  const { apiFetch } = useAuth();
+  const { supabase, user } = useAuth();
   const [batches, setBatches] = useState([]);
   const [treatModal, setTreatModal] = useState(null);
   const [treatmentType, setTreatmentType] = useState('Autoclaving');
+  const [refresh, setRefresh] = useState(0);
 
-  const load = () => {
-    apiFetch('/batches').then(r => r.json()).then(setBatches);
-  };
-  useEffect(load, [apiFetch]);
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from('batches').select('*').order('created_at', { ascending: false });
+      if (data) {
+        setBatches(data.map(b => ({
+          ...b,
+          batchNumber: b.batch_number,
+          bagCount: b.bag_count,
+          totalWeight: b.total_weight,
+          treatmentType: b.treatment_type,
+          treatedAt: b.treated_at,
+          createdAt: b.created_at,
+          categories: ['Yellow', 'Red'] // Placeholder or calculate if needed
+        })));
+      }
+    }
+    load();
+  }, [refresh, supabase]);
 
   const handleTreat = async () => {
-    await apiFetch(`/batches/${treatModal}/treat`, { method: 'POST', body: JSON.stringify({ treatmentType }) });
+    await supabase.from('batches').update({
+      status: 'treated',
+      treatment_type: treatmentType,
+      treated_at: new Date().toISOString(),
+      operator: user?.name
+    }).eq('id', treatModal);
+    
+    // Also update all bags in this batch to 'treated'
+    await supabase.from('bags').update({ status: 'treated' }).eq('batch_id', treatModal);
+
     setTreatModal(null);
-    load();
+    setRefresh(r => r + 1);
+    
+    supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'BATCH_TREATED', entity: 'BATCH', entity_id: treatModal, details: `Batch treated via ${treatmentType}` }).then();
   };
 
   const pending = batches.filter(b => b.status === 'pending');

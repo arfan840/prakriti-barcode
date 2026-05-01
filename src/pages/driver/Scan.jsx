@@ -2,39 +2,54 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function DriverScan() {
-  const { apiFetch } = useAuth();
+  const { supabase, user } = useAuth();
   const [barcode, setBarcode] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [scannedBags, setScannedBags] = useState([]);
+  const [activeRouteId, setActiveRouteId] = useState(null);
+
+  useEffect(() => {
+    async function getRoute() {
+      if (!user) return;
+      const { data } = await supabase.from('routes').select('id').eq('driver_id', user.id).eq('status', 'active').limit(1).single();
+      if (data) setActiveRouteId(data.id);
+    }
+    getRoute();
+  }, [supabase, user]);
 
   const handleScan = async (e) => {
     e.preventDefault();
     setError('');
     setResult(null);
     try {
-      const res = await apiFetch('/bags/scan', { method: 'POST', body: JSON.stringify({ barcode }) });
-      if (!res.ok) { setError(`Bag "${barcode}" not found`); return; }
-      const bag = await res.json();
-      setResult(bag);
+      const { data: bag, error: fetchErr } = await supabase.from('bags').select('*, hospitals(name)').eq('barcode', barcode).single();
+      if (fetchErr || !bag) { setError(`Bag "${barcode}" not found`); return; }
+      setResult({ ...bag, hospitalName: bag.hospitals?.name || bag.hospital_name, createdAt: bag.created_at });
     } catch { setError('Scan failed. Check connection.'); }
   };
 
   const handleCollect = async () => {
     if (!result) return;
     try {
-      const res = await apiFetch(`/bags/${result.id}/collect`, {
-        method: 'POST',
-        body: JSON.stringify({
-          weight: result.weight,
-          gpsLat: 23.3441 + (Math.random() - 0.5) * 0.1,
-          gpsLng: 85.3096 + (Math.random() - 0.5) * 0.1,
-        })
-      });
-      const updated = await res.json();
+      const payload = {
+          status: 'collected',
+          collected_at: new Date().toISOString(),
+          collected_by: user?.id,
+          route_id: activeRouteId,
+          gps_lat: 23.3441 + (Math.random() - 0.5) * 0.1,
+          gps_lng: 85.3096 + (Math.random() - 0.5) * 0.1,
+      };
+      const { data, error } = await supabase.from('bags').update(payload).eq('id', result.id).select().single();
+      if (error) throw error;
+      
+      const updated = { ...data, hospitalName: result.hospitalName };
       setScannedBags(prev => [updated, ...prev]);
       setResult(null);
       setBarcode('');
+      
+      // Audit log (async)
+      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'BAG_COLLECTED', entity: 'BAG', entity_id: result.id, details: `Bag collected at site.` }).then();
     } catch { setError('Collection failed'); }
   };
 

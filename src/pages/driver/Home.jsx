@@ -3,12 +3,17 @@ import { useAuth } from '../../context/AuthContext';
 import { Link } from 'react-router-dom';
 
 export default function DriverHome() {
-  const { apiFetch, user } = useAuth();
+  const { supabase, user } = useAuth();
   const [routes, setRoutes] = useState([]);
 
   useEffect(() => {
-    apiFetch(`/routes?driverId=${user.id}`).then(r => r.json()).then(setRoutes);
-  }, [apiFetch, user.id]);
+    async function load() {
+      if (!user) return;
+      const { data } = await supabase.from('routes').select('*').eq('driver_id', user.id);
+      if (data) setRoutes(data.map(r => ({ ...r, vehicleNumber: r.vehicle_number, siteNames: ['Multiple Sites'] })));
+    }
+    load();
+  }, [supabase, user]);
 
   const activeRoutes = routes.filter(r => r.status === 'active');
   const closedRoutes = routes.filter(r => r.status === 'closed');

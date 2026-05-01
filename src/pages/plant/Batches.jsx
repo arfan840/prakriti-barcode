@@ -2,24 +2,52 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function Batches() {
-  const { apiFetch } = useAuth();
+  const { supabase, user } = useAuth();
   const [batches, setBatches] = useState([]);
   const [availableBags, setAvailableBags] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedBags, setSelectedBags] = useState([]);
+  const [refresh, setRefresh] = useState(0);
 
-  const load = () => {
-    apiFetch('/batches').then(r => r.json()).then(setBatches);
-    apiFetch('/bags?status=received&limit=100').then(r => r.json()).then(d => setAvailableBags(d.bags || []));
-  };
-  useEffect(load, [apiFetch]);
+  useEffect(() => {
+    async function load() {
+      const { data: bData } = await supabase.from('batches').select('*').order('created_at', { ascending: false });
+      if (bData) {
+         setBatches(bData.map(b => ({ ...b, batchNumber: b.batch_number, bagCount: b.bag_count, totalWeight: b.total_weight, createdAt: b.created_at })));
+      }
+      const { data: bags } = await supabase.from('bags').select('*').eq('status', 'received');
+      if (bags) setAvailableBags(bags);
+    }
+    load();
+  }, [refresh, supabase]);
 
   const handleCreate = async () => {
     if (selectedBags.length === 0) return;
-    await apiFetch('/batches', { method: 'POST', body: JSON.stringify({ bags: selectedBags }) });
+    const activeBags = availableBags.filter(b => selectedBags.includes(b.id));
+    const totalWeight = activeBags.reduce((sum, b) => sum + (b.weight || 0), 0);
+    const batchNumber = `BT-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    
+    // Insert batch
+    const { data: newBatch, error } = await supabase.from('batches').insert({
+        batch_number: batchNumber,
+        bag_count: selectedBags.length,
+        total_weight: totalWeight,
+        status: 'pending'
+    }).select().single();
+    
+    if (error || !newBatch) return;
+
+    // Update bags status and link to batch
+    await supabase.from('bags').update({ 
+        status: 'in_batch',
+        batch_id: newBatch.id 
+    }).in('id', selectedBags);
+    
+    supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'BATCH_CREATED', entity: 'BATCH', entity_id: newBatch.id, details: `Created batch with ${selectedBags.length} bags` }).then();
+
     setShowCreate(false);
     setSelectedBags([]);
-    load();
+    setRefresh(r => r + 1);
   };
 
   const toggleBag = (id) => {

@@ -2,28 +2,34 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function DriverManifest() {
-  const { apiFetch, user } = useAuth();
+  const { supabase, user } = useAuth();
   const [routes, setRoutes] = useState([]);
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [routeBags, setRouteBags] = useState([]);
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
-    apiFetch(`/routes?driverId=${user.id}`).then(r => r.json()).then(setRoutes);
-  }, [apiFetch, user.id]);
+    async function load() {
+      if (!user) return;
+      const { data } = await supabase.from('routes').select('*').eq('driver_id', user.id);
+      if (data) setRoutes(data.map(r => ({ ...r, vehicleNumber: r.vehicle_number, siteNames: ['Multiple Sites'], status: r.status })));
+    }
+    load();
+  }, [refresh, supabase, user]);
 
   const viewRoute = async (route) => {
     setSelectedRoute(route);
-    const res = await apiFetch(`/bags?status=collected&limit=100`);
-    const data = await res.json();
-    const bags = (data.bags || []).filter(b => route.sites.includes(b.hospitalId));
-    setRouteBags(bags);
+    const { data } = await supabase.from('bags').select('*').eq('route_id', route.id).eq('status', 'collected');
+    if (data) setRouteBags(data);
   };
 
   const closeRoute = async () => {
     if (!selectedRoute) return;
-    await apiFetch(`/routes/${selectedRoute.id}/close`, { method: 'POST' });
+    await supabase.from('routes').update({ status: 'closed' }).eq('id', selectedRoute.id);
     setSelectedRoute(null);
-    apiFetch(`/routes?driverId=${user.id}`).then(r => r.json()).then(setRoutes);
+    setRefresh(r => r + 1);
+    
+    supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'ROUTE_CLOSED', entity: 'ROUTE', entity_id: selectedRoute.id, details: `Driver closed route manifest.` }).then();
   };
 
   return (

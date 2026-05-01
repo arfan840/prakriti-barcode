@@ -9,32 +9,44 @@ const ROLES = [
 ];
 
 export default function Users() {
-  const { apiFetch } = useAuth();
+  const { supabase } = useAuth();
   const [users, setUsers] = useState([]);
   const [roleFilter, setRoleFilter] = useState('');
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', role: 'driver', phone: '', password: '' });
   const [editId, setEditId] = useState(null);
+  const [refresh, setRefresh] = useState(0);
 
-  const load = () => {
-    const params = new URLSearchParams();
-    if (roleFilter) params.set('role', roleFilter);
-    if (search) params.set('search', search);
-    apiFetch(`/users?${params}`).then(r => r.json()).then(setUsers);
-  };
-  useEffect(load, [roleFilter, search, apiFetch]);
+  useEffect(() => {
+    async function load() {
+      let query = supabase.from('profiles').select('*').order('created_at', { ascending: false });
+      if (roleFilter) query = query.eq('role', roleFilter);
+      if (search) query = query.ilike('name', `%${search}%`);
+      const { data } = await query;
+      if (data) setUsers(data);
+    }
+    load();
+  }, [roleFilter, search, refresh, supabase]);
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (editId) {
-      await apiFetch(`/users/${editId}`, { method: 'PUT', body: JSON.stringify(form) });
-    } else {
-      await apiFetch('/users', { method: 'POST', body: JSON.stringify(form) });
+    if (!editId) {
+      alert("Due to security constraints with the public Supabase API key, Admins cannot directly create new users here to prevent session loss. Instruct new employees to log in on the main screen to automatically provision their account!");
+      setShowModal(false);
+      return;
     }
+    
+    // Update existing profile
+    await supabase.from('profiles').update({
+      name: form.name,
+      role: form.role,
+      phone: form.phone
+    }).eq('id', editId);
+    
     setShowModal(false);
     setEditId(null);
-    load();
+    setRefresh(r => r + 1);
   };
 
   return (

@@ -2,20 +2,48 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function Bags() {
-  const { apiFetch } = useAuth();
+  const { supabase } = useAuth();
   const [data, setData] = useState({ bags: [], total: 0 });
   const [filters, setFilters] = useState({ status: '', category: '', search: '' });
   const [page, setPage] = useState(1);
   const [selectedBag, setSelectedBag] = useState(null);
 
-  const load = () => {
-    const params = new URLSearchParams({ page, limit: 25 });
-    if (filters.status) params.set('status', filters.status);
-    if (filters.category) params.set('category', filters.category);
-    if (filters.search) params.set('search', filters.search);
-    apiFetch(`/bags?${params}`).then(r => r.json()).then(setData);
+  useEffect(() => {
+    async function load() {
+      let q = supabase.from('bags').select('*', { count: 'exact' }).order('created_at', { ascending: false });
+      if (filters.status) q = q.eq('status', filters.status);
+      if (filters.category) q = q.eq('category', filters.category);
+      if (filters.search) q = q.or(`barcode.ilike.%${filters.search}%,hospital_name.ilike.%${filters.search}%`);
+      
+      const from = (page - 1) * 25;
+      q = q.range(from, from + 24);
+
+      const { data: bags, count } = await q;
+      
+      if (bags) {
+        setData({ 
+          bags: bags.map(b => ({
+            ...b,
+            hospitalName: b.hospital_name,
+            createdAt: b.created_at,
+            gpsLat: b.gps_lat,
+            gpsLng: b.gps_lng,
+            scanHistory: []
+          })), 
+          total: count || 0 
+        });
+      }
+    }
+    load();
+  }, [filters, page, supabase]);
+
+  const handleSelectBag = async (bag) => {
+    setSelectedBag(bag);
+    const { data: logs } = await supabase.from('audit_logs').select('*').eq('entity_id', bag.id).order('created_at', { ascending: true });
+    if (logs) {
+      setSelectedBag(prev => prev?.id === bag.id ? { ...prev, scanHistory: logs.map(l => ({ action: l.action, timestamp: l.created_at })) } : prev);
+    }
   };
-  useEffect(load, [filters, page, apiFetch]);
 
   return (
     <div className="slide-up">
@@ -65,7 +93,7 @@ export default function Bags() {
                   <td>{b.weight} kg</td>
                   <td><span className={`badge badge-${b.status}`}>{b.status.replace('_', ' ')}</span></td>
                   <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{new Date(b.createdAt).toLocaleDateString()}</td>
-                  <td><button className="btn btn-secondary btn-sm" onClick={() => setSelectedBag(b)}>View</button></td>
+                  <td><button className="btn btn-secondary btn-sm" onClick={() => handleSelectBag(b)}>View</button></td>
                 </tr>
               ))}
             </tbody>

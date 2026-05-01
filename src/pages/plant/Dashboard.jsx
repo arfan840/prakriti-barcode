@@ -3,20 +3,33 @@ import { useAuth } from '../../context/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 export default function PlantDashboard() {
-  const { apiFetch } = useAuth();
+  const { supabase } = useAuth();
   const [routes, setRoutes] = useState([]);
   const [stats, setStats] = useState(null);
   const [reconSummary, setReconSummary] = useState(null);
   const [batches, setBatches] = useState([]);
 
   useEffect(() => {
-    Promise.all([
-      apiFetch('/routes?status=active').then(r => r.json()),
-      apiFetch('/bags/stats').then(r => r.json()),
-      apiFetch('/reconciliation/summary').then(r => r.json()),
-      apiFetch('/batches').then(r => r.json()),
-    ]).then(([r, s, rc, b]) => { setRoutes(r); setStats(s); setReconSummary(rc); setBatches(b); });
-  }, [apiFetch]);
+    async function load() {
+      const [{ data: rData }, { data: bStats }, { data: discData }, { data: batchData }] = await Promise.all([
+        supabase.from('routes').select('*').eq('status', 'active'),
+        supabase.from('bags').select('status'),
+        supabase.from('discrepancies').select('status').eq('status', 'open'),
+        supabase.from('batches').select('*')
+      ]);
+
+      setRoutes(rData || []);
+      setBatches(batchData || []);
+      setReconSummary({ open: (discData || []).length });
+      
+      const counts = (bStats || []).reduce((acc, b) => {
+        acc[b.status] = (acc[b.status] || 0) + 1;
+        return acc;
+      }, {});
+      setStats({ byStatus: counts });
+    }
+    load();
+  }, [supabase]);
 
   if (!stats) return <div className="loading-spinner" />;
 

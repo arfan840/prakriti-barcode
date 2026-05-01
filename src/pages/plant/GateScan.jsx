@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
 export default function GateScan() {
-  const { apiFetch } = useAuth();
+  const { supabase, user } = useAuth();
   const [barcode, setBarcode] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
@@ -13,19 +13,22 @@ export default function GateScan() {
     setError('');
     setResult(null);
     try {
-      const res = await apiFetch('/bags/scan', { method: 'POST', body: JSON.stringify({ barcode }) });
-      if (!res.ok) { setError('Bag not found'); return; }
-      const bag = await res.json();
-      setResult(bag);
+      const { data: bag, error: fetchErr } = await supabase.from('bags').select('*, hospitals(name)').eq('barcode', barcode).single();
+      if (fetchErr || !bag) { setError('Bag not found'); return; }
+      setResult({ ...bag, hospitalName: bag.hospitals?.name || bag.hospital_name, collectedAt: bag.collected_at });
     } catch { setError('Scan failed'); }
   };
 
   const handleReceive = async () => {
     if (!result) return;
-    await apiFetch(`/bags/${result.id}/receive`, { method: 'POST' });
-    setReceived(prev => [{ ...result, receivedAt: new Date().toISOString() }, ...prev]);
+    const receivedTime = new Date().toISOString();
+    await supabase.from('bags').update({ status: 'received', received_at: receivedTime, received_by: user?.id }).eq('id', result.id);
+    
+    setReceived(prev => [{ ...result, receivedAt: receivedTime }, ...prev]);
     setResult(null);
     setBarcode('');
+    
+    supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'BAG_RECEIVED', entity: 'BAG', entity_id: result.id, details: `Bag received at plant gate` }).then();
   };
 
   return (
