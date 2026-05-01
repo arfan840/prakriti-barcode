@@ -49,7 +49,7 @@ export default function LoginPage() {
       else navigate('/admin');
       
     } catch (err) {
-      setError('Login failed. Please ensure "Confirm Email" is disabled in Supabase Auth settings!');
+      setError(err.message || 'Login failed. Please check your credentials and Supabase settings.');
     } finally {
       setLoading(false);
     }
