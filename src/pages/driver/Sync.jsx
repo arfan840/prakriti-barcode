@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 export default function DriverSync() {
   const [online, setOnline] = useState(navigator.onLine);
   const [queue, setQueue] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('biotrack_sync_queue') || '[]'); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem('prakrititrack_sync_queue') || '[]'); } catch { return []; }
   });
 
   useEffect(() => {
@@ -24,18 +24,18 @@ export default function DriverSync() {
     };
     const newQueue = [item, ...queue];
     setQueue(newQueue);
-    localStorage.setItem('biotrack_sync_queue', JSON.stringify(newQueue));
+    localStorage.setItem('prakrititrack_sync_queue', JSON.stringify(newQueue));
   };
 
   const syncAll = () => {
     const synced = queue.map(q => ({ ...q, status: 'synced' }));
     setQueue(synced);
-    localStorage.setItem('biotrack_sync_queue', JSON.stringify(synced));
+    localStorage.setItem('prakrititrack_sync_queue', JSON.stringify(synced));
   };
 
   const clearQueue = () => {
     setQueue([]);
-    localStorage.removeItem('biotrack_sync_queue');
+    localStorage.removeItem('prakrititrack_sync_queue');
   };
 
   const pendingCount = queue.filter(q => q.status === 'pending').length;

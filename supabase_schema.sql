@@ -1,5 +1,5 @@
 -- ==========================================
--- BioTrack Supabase Schema Initialization
+-- Prakriti Track Supabase Schema Initialization
 -- ==========================================
 
 -- Enable extensions

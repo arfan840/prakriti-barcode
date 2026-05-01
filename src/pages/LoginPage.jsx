@@ -65,7 +65,7 @@ export default function LoginPage() {
       <div className="login-card slide-up">
         <div className="login-logo">
           <div className="login-logo-icon">☣️</div>
-          <h1>Bio<span>Track</span></h1>
+          <h1>Prakriti<span>Track</span></h1>
           <p>Biomedical Waste Management System</p>
         </div>
 
@@ -104,17 +104,17 @@ export default function LoginPage() {
         <div className="login-demo">
           <strong>Demo Credentials (click to fill):</strong>
           <div style={{ display: 'grid', gap: '6px', marginTop: '8px' }}>
-            <span onClick={() => quickLogin('admin@biotrack.in', 'admin123')} style={{ cursor: 'pointer' }}>
-              🔑 Plant Head: <code>admin@biotrack.in</code> / <code>admin123</code>
+            <span onClick={() => quickLogin('admin@prakrititrack.in', 'admin123')} style={{ cursor: 'pointer' }}>
+              🔑 Plant Head: <code>admin@prakrititrack.in</code> / <code>admin123</code>
             </span>
-            <span onClick={() => quickLogin('manager@biotrack.in', 'manager123')} style={{ cursor: 'pointer' }}>
-              🔑 Manager: <code>manager@biotrack.in</code> / <code>manager123</code>
+            <span onClick={() => quickLogin('manager@prakrititrack.in', 'manager123')} style={{ cursor: 'pointer' }}>
+              🔑 Manager: <code>manager@prakrititrack.in</code> / <code>manager123</code>
             </span>
-            <span onClick={() => quickLogin('driver1@biotrack.in', 'driver123')} style={{ cursor: 'pointer' }}>
-              🔑 Driver: <code>driver1@biotrack.in</code> / <code>driver123</code>
+            <span onClick={() => quickLogin('driver1@prakrititrack.in', 'driver123')} style={{ cursor: 'pointer' }}>
+              🔑 Driver: <code>driver1@prakrititrack.in</code> / <code>driver123</code>
             </span>
-            <span onClick={() => quickLogin('authority@biotrack.in', 'authority123')} style={{ cursor: 'pointer' }}>
-              🔑 Regulatory: <code>authority@biotrack.in</code> / <code>authority123</code>
+            <span onClick={() => quickLogin('authority@prakrititrack.in', 'authority123')} style={{ cursor: 'pointer' }}>
+              🔑 Regulatory: <code>authority@prakrititrack.in</code> / <code>authority123</code>
             </span>
           </div>
         </div>

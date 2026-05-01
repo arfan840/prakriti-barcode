@@ -67,7 +67,7 @@ export default function Certificates() {
             </div>
             <div className="certificate">
               <div className="certificate-header">
-                <h1>☣️ BioTrack</h1>
+                <h1>☣️ Prakriti Track</h1>
                 <h1>Certificate of Treatment</h1>
                 <p>Biomedical Waste Management Facility</p>
               </div>
