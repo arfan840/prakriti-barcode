@@ -54,7 +54,7 @@ export default function QRLabel({ bag, size = 160, compact = false }) {
         marginBottom: compact ? 2 : 4,
       }}>
         <div style={{ fontSize: compact ? '0.55rem' : '0.6rem', color: colors.text, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Prakriti Waste Management
+          Prakriti Track
         </div>
         <div style={{
           fontSize: compact ? '0.65rem' : '0.75rem',

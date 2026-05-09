@@ -33,7 +33,7 @@ export async function printLabels(bags) {
     return `
       <div class="label" style="border:2px solid ${c.border};background:${c.bg};border-radius:8px;padding:10px;display:inline-flex;flex-direction:column;align-items:center;gap:6px;width:62mm;font-family:'Arial',sans-serif;page-break-inside:avoid;margin:4mm;">
         <div style="width:100%;text-align:center;border-bottom:1px solid ${c.border};padding-bottom:4px;margin-bottom:2px;">
-          <div style="font-size:6pt;color:${c.text};font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Prakriti Waste Management</div>
+          <div style="font-size:6pt;color:${c.text};font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Prakriti Track</div>
           <div style="font-size:8pt;font-weight:800;color:${c.text};margin-top:2px;line-height:1.2;">${bag.hospital_name}</div>
         </div>
         <div style="background:${c.border};color:#fff;font-weight:700;font-size:7pt;border-radius:4px;padding:2px 10px;letter-spacing:0.1em;text-transform:uppercase;">${bag.category} Waste</div>

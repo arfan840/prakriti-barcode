@@ -34,7 +34,7 @@ function generateCertificateHTML(batch, treatedBy) {
       <div class="border">
         <div class="header">
           <div class="logo">☣️</div>
-          <h1>Prakriti Waste Management Pvt. Ltd.</h1>
+          <h1>Prakriti Track Pvt. Ltd.</h1>
           <h2>Common Bio-Medical Waste Treatment Facility (CBWTF)</h2>
           <h2>Jharkhand, India</h2>
         </div>
