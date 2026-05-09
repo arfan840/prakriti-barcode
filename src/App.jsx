@@ -10,6 +10,7 @@ import AdminDiscrepancies from './pages/admin/Discrepancies';
 import AdminReports from './pages/admin/Reports';
 import AdminAudit from './pages/admin/Audit';
 import AdminCertificates from './pages/admin/Certificates';
+import AdminVehicles from './pages/admin/Vehicles';
 import PlantDashboard from './pages/plant/Dashboard';
 import PlantGateScan from './pages/plant/GateScan';
 import PlantReconciliation from './pages/plant/Reconciliation';
@@ -52,6 +53,7 @@ function AppRoutes() {
         <Route path="hospitals" element={<AdminHospitals />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="bags" element={<AdminBags />} />
+        <Route path="vehicles" element={<AdminVehicles />} />
         <Route path="discrepancies" element={<AdminDiscrepancies />} />
         <Route path="reports" element={<AdminReports />} />
         <Route path="audit" element={<AdminAudit />} />

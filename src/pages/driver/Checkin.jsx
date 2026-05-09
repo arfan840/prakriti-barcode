@@ -5,102 +5,103 @@ export default function DriverCheckin() {
   const { supabase, user } = useAuth();
   const [gps, setGps] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [checkedIn, setCheckedIn] = useState(false);
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [hospital, setHospital] = useState('');
+  const [notes, setNotes] = useState('');
+  const [hospitals, setHospitals] = useState([]);
 
-  const getLocation = () => {
-    setLoading(true);
-    setError('');
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
-          setLoading(false);
-        },
-        () => {
-          // Fallback to demo coords
-          setGps({ lat: 23.3441 + (Math.random() - 0.5) * 0.05, lng: 85.3096 + (Math.random() - 0.5) * 0.05, accuracy: 15 });
-          setLoading(false);
-        },
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
-    } else {
-      setGps({ lat: 23.3441, lng: 85.3096, accuracy: 50 });
-      setLoading(false);
-    }
+  React.useEffect(() => {
+    supabase.from('hospitals').select('id, name, district').order('name').then(({ data }) => {
+      if (data) setHospitals(data);
+    });
+  }, [supabase]);
+
+  const captureGPS = () => {
+    setLoading(true); setError(''); setSaved(false);
+    if (!navigator.geolocation) { setError('GPS not supported on this device.'); setLoading(false); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: Math.round(pos.coords.accuracy) });
+        setLoading(false);
+      },
+      (err) => { setError(`GPS error: ${err.message}`); setLoading(false); },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
   };
 
-  const handleCheckin = () => {
-    setCheckedIn(true);
-    supabase.from('audit_logs').insert({ 
-        user_id: user?.id, 
-        user_name: user?.name, 
-        action: 'GPS_CHECKIN', 
-        entity: 'LOCATION', 
-        details: `Checked in at ${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}` 
-    }).then();
+  const handleCheckin = async (e) => {
+    e.preventDefault();
+    if (!gps) { setError('Please capture GPS first.'); return; }
+    setLoading(true);
+    try {
+      await supabase.from('audit_logs').insert({
+        user_id: user?.id, user_name: user?.name,
+        action: 'DRIVER_CHECKIN', entity: 'CHECKIN',
+        details: `Driver checked in at ${hospital || 'location'} — GPS: ${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}${notes ? '. Notes: ' + notes : ''}`,
+      });
+      setSaved(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="slide-up">
       <div className="card-header">
-        <h2>📍 GPS Check-in</h2>
+        <h2>📍 GPS Check-In</h2>
       </div>
 
-      <div className="card gps-card">
-        {!gps && !loading && (
-          <>
-            <div className="gps-icon">📍</div>
-            <h3 style={{ marginBottom: 8 }}>Capture Your Location</h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
-              Tap the button below to record your GPS coordinates at this collection site.
-            </p>
-            <button className="btn btn-primary btn-lg" onClick={getLocation}>
-              🛰️ Get GPS Location
-            </button>
-          </>
-        )}
+      {saved && (
+        <div style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontWeight: 600, color: 'var(--accent-green)' }}>
+          ✅ Check-in recorded successfully!
+        </div>
+      )}
+      {error && (
+        <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#ef4444' }}>
+          {error}
+        </div>
+      )}
 
-        {loading && (
-          <>
-            <div className="loading-spinner" />
-            <p style={{ color: 'var(--text-secondary)', marginTop: 16 }}>Acquiring GPS signal...</p>
-          </>
-        )}
+      <div className="card">
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <button className="btn btn-primary btn-lg" onClick={captureGPS} disabled={loading} style={{ minWidth: 220 }}>
+            {loading ? '📡 Getting GPS...' : '📡 Capture GPS Location'}
+          </button>
+        </div>
 
-        {gps && !checkedIn && (
-          <>
-            <div className="gps-icon" style={{ color: 'var(--accent-success)' }}>📍</div>
-            <h3 style={{ color: 'var(--accent-success)', marginBottom: 8 }}>Location Acquired</h3>
-            <div className="gps-coords">
-              {gps.lat.toFixed(6)}° N, {gps.lng.toFixed(6)}° E
+        {gps && (
+          <div style={{ background: 'rgba(16,185,129,0.08)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
+            <div style={{ fontWeight: 700, color: 'var(--accent-green)', marginBottom: 8 }}>📍 Location Captured</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, fontFamily: 'monospace', fontSize: '0.9rem' }}>
+              <div><div className="form-label">Latitude</div><strong>{gps.lat.toFixed(6)}</strong></div>
+              <div><div className="form-label">Longitude</div><strong>{gps.lng.toFixed(6)}</strong></div>
+              <div><div className="form-label">Accuracy</div><strong>±{gps.accuracy}m</strong></div>
             </div>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 24 }}>
-              Accuracy: ±{gps.accuracy?.toFixed(0)}m | {new Date().toLocaleTimeString()}
-            </p>
-            <button className="btn btn-success btn-lg" onClick={handleCheckin} style={{ width: '100%' }}>
-              ✅ Confirm Check-in
-            </button>
-          </>
-        )}
-
-        {checkedIn && (
-          <>
-            <div style={{ fontSize: '3rem', marginBottom: 16 }}>✅</div>
-            <h3 style={{ color: 'var(--accent-success)', marginBottom: 8 }}>Successfully Checked In</h3>
-            <div className="gps-coords">
-              {gps.lat.toFixed(6)}° N, {gps.lng.toFixed(6)}° E
+            <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              Timestamp: {new Date().toLocaleString('en-IN')}
             </div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 24 }}>
-              Checked in at {new Date().toLocaleString()}
-            </p>
-            <button className="btn btn-secondary" onClick={() => { setGps(null); setCheckedIn(false); }}>
-              📍 New Check-in
-            </button>
-          </>
+          </div>
         )}
 
-        {error && <div className="login-error" style={{ marginTop: 16 }}>{error}</div>}
+        <form onSubmit={handleCheckin}>
+          <div className="form-group">
+            <label className="form-label">Healthcare Facility (Optional)</label>
+            <select className="form-select" value={hospital} onChange={e => setHospital(e.target.value)}>
+              <option value="">Select HCF...</option>
+              {hospitals.map(h => <option key={h.id} value={h.name}>{h.name} — {h.district}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Notes (Optional)</label>
+            <input className="form-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any additional notes..." />
+          </div>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={!gps || loading}>
+            ✅ Save Check-In
+          </button>
+        </form>
       </div>
     </div>
   );

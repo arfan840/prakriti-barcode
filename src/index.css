@@ -1162,3 +1162,117 @@ a:hover { color: var(--accent-primary-hover); }
 .sync-item-status.pending { background: var(--accent-warning); }
 .sync-item-status.synced { background: var(--accent-success); }
 .sync-item-status.failed { background: var(--accent-danger); }
+
+/* ── Stat Mini (used in Hospitals filter bar) ── */
+.stat-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 16px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  min-width: 80px;
+  text-align: center;
+}
+.stat-mini-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.stat-mini-val {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+/* ── QR Label (on-screen) ── */
+.qr-label {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* ── Report Table ── */
+.report-table th { font-size: 0.65rem; }
+.report-table tfoot td { font-weight: 700; }
+
+/* ══════════════════════════════════════════════
+   PRINT STYLES
+   Applied when window.print() is called
+   ══════════════════════════════════════════════ */
+@media print {
+  /* Hide non-printable UI */
+  .no-print,
+  .sidebar,
+  .top-header,
+  .menu-toggle,
+  .filter-bar,
+  button:not(.print-only),
+  .btn:not(.print-only) {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-family: Arial, sans-serif;
+    font-size: 11pt;
+    margin: 0;
+    padding: 0;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+  }
+
+  .page-content {
+    padding: 0 !important;
+  }
+
+  /* Report table print styles */
+  #printable-report {
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    background: #fff;
+  }
+
+  #printable-report .data-table th {
+    background: #1a5276 !important;
+    color: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-size: 7pt;
+    padding: 6px 8px;
+  }
+
+  #printable-report .data-table td {
+    font-size: 8pt;
+    padding: 5px 8px;
+    color: #000;
+    border-bottom: 1px solid #ddd;
+  }
+
+  #printable-report .data-table tfoot td {
+    background: #eaf0f7 !important;
+    font-weight: 700;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* QR Label print styles */
+  .labels-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4mm;
+    padding: 4mm;
+  }
+
+  .qr-label {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

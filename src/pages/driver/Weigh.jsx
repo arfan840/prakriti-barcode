@@ -1,44 +1,41 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { parseQRPayload } from '../../lib/qrGenerator';
 
 export default function DriverWeigh() {
   const { supabase, user } = useAuth();
   const [barcode, setBarcode] = useState('');
-  const [weight, setWeight] = useState('');
   const [bag, setBag] = useState(null);
-  const [saved, setSaved] = useState(false);
+  const [weight, setWeight] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
-  const [activeRouteId, setActiveRouteId] = useState(null);
 
-  useEffect(() => {
-    async function getRoute() {
-      if (!user) return;
-      const { data } = await supabase.from('routes').select('id').eq('driver_id', user.id).eq('status', 'active').limit(1).single();
-      if (data) setActiveRouteId(data.id);
-    }
-    getRoute();
-  }, [supabase, user]);
-
-  const lookupBag = async (e) => {
-    e.preventDefault();
-    setError('');
-    setBag(null);
-    setSaved(false);
-    const { data: bg, error: fetchErr } = await supabase.from('bags').select('*, hospitals(name)').eq('barcode', barcode).single();
-    if (fetchErr || !bg) { setError('Bag not found'); return; }
-    setBag({ ...bg, hospitalName: bg.hospitals?.name || bg.hospital_name });
-    setWeight(bg.weight?.toString() || '');
+  const lookupBag = async (code) => {
+    const bagId = parseQRPayload(code) || code;
+    setError(''); setBag(null); setSuccess('');
+    const { data, error: err } = await supabase.from('bags').select('*').eq('barcode', bagId).single();
+    if (err || !data) { setError(`Bag not found: ${bagId}`); return; }
+    setBag(data);
+    setWeight(data.weight ? String(data.weight) : '');
   };
 
-  const saveWeight = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     if (!bag || !weight) return;
-    await supabase.from('bags').update({ 
-        weight: parseFloat(weight),
-        route_id: activeRouteId 
-    }).eq('id', bag.id);
-    setSaved(true);
-    
-    supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'WEIGHT_UPDATED', entity: 'BAG', entity_id: bag.id, details: `Weight set to ${weight} kg` }).then();
+    const w = parseFloat(weight);
+    if (isNaN(w) || w <= 0) { setError('Enter a valid weight in kg'); return; }
+    setSaving(true);
+    try {
+      await supabase.from('bags').update({ weight: w }).eq('id', bag.id);
+      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'BAG_WEIGHED', entity: 'BAG', entity_id: bag.id, details: `Weight set to ${w} kg for bag ${bag.barcode}` }).then();
+      setSuccess(`✅ Weight ${w} kg saved for ${bag.barcode}`);
+      setBag(null); setBarcode(''); setWeight('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -47,55 +44,56 @@ export default function DriverWeigh() {
         <h2>⚖️ Weigh Bag</h2>
       </div>
 
-      <div className="card" style={{ maxWidth: 500, marginBottom: 24 }}>
-        <form onSubmit={lookupBag}>
-          <div className="form-group">
-            <label className="form-label">Barcode</label>
-            <input className="form-input" value={barcode} onChange={e => setBarcode(e.target.value.toUpperCase())} placeholder="BMW2025XXXX" style={{ fontFamily: 'monospace', textAlign: 'center' }} />
+      {success && <div style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: 'var(--accent-green)', fontWeight: 600 }}>{success}</div>}
+      {error && <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#ef4444' }}>{error}</div>}
+
+      <div className="card">
+        <div className="form-group">
+          <label className="form-label">Bag ID / Barcode</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="form-input" value={barcode} onChange={e => setBarcode(e.target.value)}
+              placeholder="JH-DGH-HCF0001-Y-20250509-000001" style={{ fontFamily: 'monospace', flex: 1 }} />
+            <button className="btn btn-primary" type="button" onClick={() => lookupBag(barcode)} disabled={!barcode}>Find</button>
           </div>
-          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>🔍 Find Bag</button>
-        </form>
-      </div>
+        </div>
 
-      {error && <div className="login-error">{error}</div>}
+        {bag && (
+          <form onSubmit={handleSubmit}>
+            <div style={{ background: 'rgba(99,102,241,0.08)', borderRadius: 10, padding: 16, marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div><div className="form-label">Hospital</div><div style={{ fontWeight: 600 }}>{bag.hospital_name}</div></div>
+                <div><div className="form-label">Category</div><span className={`badge badge-${bag.category}`}>{bag.category}</span></div>
+                <div><div className="form-label">Status</div><span className={`badge badge-${bag.status}`}>{bag.status}</span></div>
+                <div><div className="form-label">Current Weight</div><div>{bag.weight ? `${bag.weight} kg` : '—'}</div></div>
+              </div>
+            </div>
 
-      {bag && (
-        <div className="card slide-up" style={{ maxWidth: 500 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-            <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{bag.barcode}</span>
-            <span className={`badge badge-${bag.category}`}>{bag.category}</span>
-          </div>
-          <div style={{ marginBottom: 16, color: 'var(--text-secondary)' }}>{bag.hospitalName}</div>
+            <div className="form-group">
+              <label className="form-label">Weight (kg) *</label>
+              <input
+                className="form-input"
+                type="number"
+                step="0.001"
+                min="0.001"
+                value={weight}
+                onChange={e => setWeight(e.target.value)}
+                placeholder="e.g. 2.450"
+                style={{ fontSize: '1.5rem', textAlign: 'center', fontWeight: 700 }}
+                autoFocus
+                required
+              />
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4 }}>Enter weight from weighing machine or manual measurement</div>
+            </div>
 
-          <div className="form-group">
-            <label className="form-label">Weight (kg)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              className="form-input"
-              value={weight}
-              onChange={e => setWeight(e.target.value)}
-              style={{ fontSize: '2rem', textAlign: 'center', fontWeight: 700, padding: '20px' }}
-              placeholder="0.00"
-            />
-          </div>
-
-          {!saved ? (
-            <button className="btn btn-success btn-lg" style={{ width: '100%' }} onClick={saveWeight} disabled={!weight}>
-              ✅ Save Weight
-            </button>
-          ) : (
-            <div style={{ textAlign: 'center', padding: 20 }}>
-              <div style={{ fontSize: '2rem', marginBottom: 8 }}>✅</div>
-              <div style={{ fontWeight: 600, color: 'var(--accent-success)' }}>Weight saved: {weight} kg</div>
-              <button className="btn btn-secondary" style={{ marginTop: 16 }} onClick={() => { setBag(null); setBarcode(''); setSaved(false); }}>
-                Weigh Another
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setBag(null); setBarcode(''); setWeight(''); }} style={{ flex: 1 }}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={saving} style={{ flex: 2 }}>
+                {saving ? 'Saving...' : '⚖️ Save Weight'}
               </button>
             </div>
-          )}
-        </div>
-      )}
+          </form>
+        )}
+      </div>
     </div>
   );
 }

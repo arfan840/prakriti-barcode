@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 
 const navConfig = {
   admin: {
-    title: 'Admin Dashboard',
+    title: 'Prakriti Track — Admin',
     sections: [
       {
         title: 'Overview',
@@ -16,7 +16,8 @@ const navConfig = {
       {
         title: 'Management',
         items: [
-          { path: '/admin/hospitals', icon: '🏥', label: 'Hospitals' },
+          { path: '/admin/hospitals', icon: '🏥', label: 'HCF Registry' },
+          { path: '/admin/vehicles', icon: '🚛', label: 'Vehicles' },
           { path: '/admin/users', icon: '👥', label: 'Users' },
           { path: '/admin/discrepancies', icon: '⚠️', label: 'Discrepancies' },
         ]
@@ -32,7 +33,7 @@ const navConfig = {
     ]
   },
   plant: {
-    title: 'Plant Operator',
+    title: 'Plant Module',
     sections: [
       {
         title: 'Operations',
@@ -46,7 +47,7 @@ const navConfig = {
         title: 'Processing',
         items: [
           { path: '/plant/batches', icon: '📦', label: 'Batches' },
-          { path: '/plant/treatment', icon: '♻️', label: 'Treatment' },
+          { path: '/plant/treatment', icon: '♻️', label: 'Treatment & Certs' },
         ]
       }
     ]
@@ -55,11 +56,11 @@ const navConfig = {
     title: 'Driver App',
     sections: [
       {
-        title: 'Today\'s Route',
+        title: "Today's Route",
         items: [
           { path: '/driver', icon: '🗺️', label: 'Route Overview', end: true },
           { path: '/driver/checkin', icon: '📍', label: 'GPS Check-in' },
-          { path: '/driver/scan', icon: '📱', label: 'Scan Barcode' },
+          { path: '/driver/scan', icon: '📱', label: 'Scan Bag' },
         ]
       },
       {
@@ -97,7 +98,7 @@ export default function AppLayout({ module }) {
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-brand">
           <div className="sidebar-brand-icon">☣️</div>
-          <div className="sidebar-brand-text">Bio<span>Track</span></div>
+          <div className="sidebar-brand-text">Prakriti<span>Track</span></div>
         </div>
 
         {config.sections.map((section, si) => (
@@ -144,13 +145,13 @@ export default function AppLayout({ module }) {
             <h1>{config.title}</h1>
           </div>
           <div className="top-header-right">
-            <div className="user-info" onClick={handleLogout} title="Click to logout">
+            <div className="user-info" onClick={handleLogout} title="Click to logout" style={{ cursor: 'pointer' }}>
               <div className="user-info-text">
                 <div className="user-info-name">{user?.name}</div>
-                <div className="user-info-role">{user?.role?.replace('_', ' ')}</div>
+                <div className="user-info-role">{user?.role?.replace(/_/g, ' ')}</div>
               </div>
               <div className="user-avatar">
-                {user?.name?.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                {user?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
               </div>
             </div>
           </div>

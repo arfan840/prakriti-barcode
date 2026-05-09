@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, Legend } from 'recharts';
 
 const COLORS = ['#fbbf24', '#f87171', '#60a5fa', '#e5e7eb'];
-const CATEGORY_COLORS = { Yellow: '#fbbf24', Red: '#f87171', Blue: '#60a5fa', White: '#e5e7eb' };
+const CATEGORY_COLORS = { Yellow: '#fbbf24', Red: '#f87171', Blue: '#60a5fa', White: '#94a3b8' };
 
 export default function Dashboard() {
   const { supabase } = useAuth();
@@ -14,57 +14,54 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function fetchData() {
-      // 1. Fetch all Bags for Stats & Trends
-      const { data: bags } = await supabase.from('bags').select('*');
+      const [{ data: bags }, { data: discs }, { data: batches }, { data: hcfs }, { count: vehicleCount }] = await Promise.all([
+        supabase.from('bags').select('*'),
+        supabase.from('discrepancies').select('*'),
+        supabase.from('batches').select('*'),
+        supabase.from('hospitals').select('id, bedded'),
+        supabase.from('vehicles').select('id', { count: 'exact', head: true }),
+      ]);
+
       if (bags) {
         const today = new Date().toISOString().split('T')[0];
+        const created = bags.filter(b => b.status === 'created').length;
         setStats({
           total: bags.length,
           todayBags: bags.filter(b => b.created_at?.startsWith(today)).length,
           totalWeight: Number(bags.reduce((s, b) => s + (b.weight || 0), 0).toFixed(2)),
-          byCategory: bags.reduce((acc, b) => { acc[b.category] = (acc[b.category]||0)+1; return acc; }, {}),
-          byStatus: bags.reduce((acc, b) => { acc[b.status] = (acc[b.status]||0)+1; return acc; }, {})
+          pendingBags: created,
+          hcfCount: hcfs?.length || 0,
+          vehicleCount: vehicleCount || 0,
+          byCategory: bags.reduce((acc, b) => { acc[b.category] = (acc[b.category] || 0) + 1; return acc; }, {}),
+          byStatus: bags.reduce((acc, b) => { acc[b.status] = (acc[b.status] || 0) + 1; return acc; }, {}),
         });
 
-        // Compute 30 day trends
         const tMap = {};
-        for(let i=29; i>=0; i--){
-          const d = new Date(); d.setDate(d.getDate()-i);
+        for (let i = 29; i >= 0; i--) {
+          const d = new Date(); d.setDate(d.getDate() - i);
           tMap[d.toISOString().split('T')[0]] = { bags: 0, weight: 0 };
         }
         bags.forEach(b => {
           const d = b.created_at?.split('T')[0];
-          if(tMap[d]) { tMap[d].bags++; tMap[d].weight += (b.weight||0); }
+          if (tMap[d]) { tMap[d].bags++; tMap[d].weight += (b.weight || 0); }
         });
-        setTrends(Object.entries(tMap).map(([k,v]) => ({ date: k, bags: v.bags, weight: Number(v.weight.toFixed(2)) })));
+        setTrends(Object.entries(tMap).map(([k, v]) => ({ date: k, bags: v.bags, weight: Number(v.weight.toFixed(2)) })));
       }
 
-      // 2. Fetch Discrepancies
-      const { data: discs } = await supabase.from('discrepancies').select('*');
       if (discs) {
-        setReconSummary({
-          total: discs.length,
-          open: discs.filter(d => d.status === 'open').length,
-          resolved: discs.filter(d => d.status === 'resolved').length
-        });
+        setReconSummary({ total: discs.length, open: discs.filter(d => d.status === 'open').length, resolved: discs.filter(d => d.status === 'resolved').length });
       }
 
-      // 3. Fetch Batches
-      const { data: batches } = await supabase.from('batches').select('*');
       if (batches) {
         const treated = batches.filter(b => b.status === 'treated');
         const byType = {};
         treated.forEach(b => {
           const bt = b.treatment_type || 'Unknown';
-          if(!byType[bt]) byType[bt] = { bags: 0, weight: 0 };
+          if (!byType[bt]) byType[bt] = { bags: 0, weight: 0 };
           byType[bt].bags += (b.bag_count || 0);
           byType[bt].weight += Number((b.total_weight || 0).toFixed(2));
         });
-        setTreatmentStats({
-          treatedBatches: treated.length,
-          pendingBatches: batches.length - treated.length,
-          byType
-        });
+        setTreatmentStats({ treatedBatches: treated.length, pendingBatches: batches.length - treated.length, byType });
       }
     }
     fetchData();
@@ -73,10 +70,21 @@ export default function Dashboard() {
   if (!stats) return <div className="loading-spinner" />;
 
   const categoryData = Object.entries(stats.byCategory || {}).map(([name, count]) => ({ name, value: count }));
-  const statusData = Object.entries(stats.byStatus || {}).map(([name, count]) => ({ name: name.replace('_', ' '), count }));
+  const statusData = Object.entries(stats.byStatus || {}).map(([name, count]) => ({ name: name.replace(/_/g, ' '), count }));
 
   return (
     <div className="slide-up">
+      {/* Discrepancy Alert Banner */}
+      {reconSummary?.open > 0 && (
+        <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '12px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+          <div>
+            <strong style={{ color: '#ef4444' }}>{reconSummary.open} open discrepancies</strong>
+            <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: '0.85rem' }}>require attention — check Discrepancies section</span>
+          </div>
+        </div>
+      )}
+
       <div className="stats-grid">
         <div className="stat-card" style={{ '--stat-color': '#6366f1' }}>
           <div className="stat-card-icon" style={{ background: 'rgba(99,102,241,0.1)' }}>📦</div>
@@ -84,13 +92,19 @@ export default function Dashboard() {
           <div className="stat-card-label">Total Bags Tracked</div>
           <div className="stat-card-change positive">+{stats.todayBags} today</div>
         </div>
+        <div className="stat-card" style={{ '--stat-color': '#f59e0b' }}>
+          <div className="stat-card-icon" style={{ background: 'rgba(245,158,11,0.1)' }}>🏷️</div>
+          <div className="stat-card-value">{stats.pendingBags.toLocaleString()}</div>
+          <div className="stat-card-label">Pending Collection</div>
+          <div className="stat-card-change">awaiting pickup</div>
+        </div>
         <div className="stat-card" style={{ '--stat-color': '#10b981' }}>
           <div className="stat-card-icon" style={{ background: 'rgba(16,185,129,0.1)' }}>⚖️</div>
           <div className="stat-card-value">{stats.totalWeight.toLocaleString()} kg</div>
           <div className="stat-card-label">Total Weight Processed</div>
         </div>
-        <div className="stat-card" style={{ '--stat-color': '#f59e0b' }}>
-          <div className="stat-card-icon" style={{ background: 'rgba(245,158,11,0.1)' }}>⚠️</div>
+        <div className="stat-card" style={{ '--stat-color': '#ef4444' }}>
+          <div className="stat-card-icon" style={{ background: 'rgba(239,68,68,0.1)' }}>⚠️</div>
           <div className="stat-card-value">{reconSummary?.open || 0}</div>
           <div className="stat-card-label">Open Discrepancies</div>
           <div className="stat-card-change negative">{reconSummary?.total || 0} total</div>
@@ -100,6 +114,12 @@ export default function Dashboard() {
           <div className="stat-card-value">{treatmentStats?.treatedBatches || 0}</div>
           <div className="stat-card-label">Batches Treated</div>
           <div className="stat-card-change">{treatmentStats?.pendingBatches || 0} pending</div>
+        </div>
+        <div className="stat-card" style={{ '--stat-color': '#06b6d4' }}>
+          <div className="stat-card-icon" style={{ background: 'rgba(6,182,212,0.1)' }}>🏥</div>
+          <div className="stat-card-value">{stats.hcfCount}</div>
+          <div className="stat-card-label">Healthcare Facilities</div>
+          <div className="stat-card-change">{stats.vehicleCount} vehicles</div>
         </div>
       </div>
 
@@ -118,8 +138,8 @@ export default function Dashboard() {
               <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={d => d.slice(5)} />
               <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
               <Tooltip contentStyle={{ background: '#1a2236', border: '1px solid rgba(148,163,184,0.1)', borderRadius: 8, color: '#f1f5f9' }} />
-              <Area type="monotone" dataKey="bags" stroke="#6366f1" fill="url(#colorBags)" strokeWidth={2} />
-              <Area type="monotone" dataKey="weight" stroke="#10b981" fill="none" strokeWidth={2} strokeDasharray="4 4" />
+              <Area type="monotone" dataKey="bags" stroke="#6366f1" fill="url(#colorBags)" strokeWidth={2} name="Bags" />
+              <Area type="monotone" dataKey="weight" stroke="#10b981" fill="none" strokeWidth={2} strokeDasharray="4 4" name="Weight (kg)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -141,7 +161,7 @@ export default function Dashboard() {
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={statusData}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
-              <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} />
+              <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 10 }} />
               <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
               <Tooltip contentStyle={{ background: '#1a2236', border: '1px solid rgba(148,163,184,0.1)', borderRadius: 8, color: '#f1f5f9' }} />
               <Bar dataKey="count" fill="#8b5cf6" radius={[6, 6, 0, 0]} />

@@ -1,132 +1,154 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 
-export default function Reconciliation() {
-  const { supabase } = useAuth();
+export default function PlantReconciliation() {
+  const { supabase, user } = useAuth();
   const [routes, setRoutes] = useState([]);
-  const [selectedRoute, setSelectedRoute] = useState(null);
-  const [result, setResult] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [details, setDetails] = useState({ collected: [], received: [] });
   const [loading, setLoading] = useState(false);
+  const [resolving, setResolving] = useState(null);
 
   useEffect(() => {
-    async function loadRoutes() {
-      const { data } = await supabase.from('routes').select('*, profiles(name)').eq('status', 'closed');
-      if (data) setRoutes(data.map(r => ({ ...r, driverName: r.profiles?.name || 'Unknown', vehicleNumber: r.vehicle_number, siteNames: ['Multiple'] })));
-    }
-    loadRoutes();
+    supabase.from('routes').select('*, profiles(name)').order('date', { ascending: false }).limit(50)
+      .then(({ data }) => { if (data) setRoutes(data); });
   }, [supabase]);
 
-  const runReconciliation = async (routeId) => {
+  const viewRoute = async (route) => {
+    setSelected(route);
     setLoading(true);
-    setSelectedRoute(routeId);
     try {
-      // 1. Get all bags linked to this route
-      const { data: bags } = await supabase.from('bags').select('*').eq('route_id', routeId);
-      
-      const collected = bags.filter(b => ['collected', 'received', 'in_batch', 'treated'].includes(b.status)).length;
-      const received = bags.filter(b => ['received', 'in_batch', 'treated'].includes(b.status)).length;
-      const missing = bags.filter(b => b.status === 'collected');
-      
-      // 2. Log discrepancies for missing bags
-      for (const bag of missing) {
-          const { data: existing } = await supabase.from('discrepancies').select('id').eq('bag_id', bag.id).eq('status', 'open').single();
-          if (!existing) {
-              await supabase.from('discrepancies').insert({
-                  bag_id: bag.id,
-                  barcode: bag.barcode,
-                  type: 'MISSING_AT_PLANT',
-                  description: `Bag ${bag.barcode} was collected by driver but never scanned at plant gate.`,
-                  route_id: routeId,
-                  status: 'open'
-              });
-          }
-      }
-
-      setResult({
-          collected,
-          received,
-          matched: received,
-          missingAtPlant: missing.length,
-          unexpectedAtPlant: 0, // Simplified for now
-          newDiscrepancies: missing.length,
-          discrepancies: missing
-      });
-    } catch (err) { 
-      console.error(err);
-      setResult(null); 
+      const { data: bags } = await supabase.from('bags').select('*').eq('route_id', route.id);
+      const collected = bags?.filter(b => ['collected', 'received', 'in_batch', 'treated'].includes(b.status)) || [];
+      const received = bags?.filter(b => ['received', 'in_batch', 'treated'].includes(b.status)) || [];
+      setDetails({ collected, received, allBags: bags || [] });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
+
+  const createDiscrepancy = async (bag, type) => {
+    setResolving(bag.id);
+    try {
+      await supabase.from('discrepancies').insert({
+        bag_id: bag.id, barcode: bag.barcode, type,
+        description: type === 'missing' ? `Bag collected but not received at plant` : `Bag received at plant but no collection record`,
+        route_id: selected?.id, status: 'open',
+      });
+      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'DISCREPANCY_CREATED', entity: 'BAG', entity_id: bag.id, details: `${type} discrepancy for ${bag.barcode}` }).then();
+      alert(`Discrepancy logged for ${bag.barcode}`);
+    } finally {
+      setResolving(null);
+    }
+  };
+
+  const missingBags = details.collected?.filter(b => !details.received?.find(r => r.id === b.id)) || [];
+  const catStats = (bags) => ['Yellow', 'Red', 'Blue', 'White'].map(cat => ({
+    cat, count: bags.filter(b => b.category === cat).length,
+    weight: bags.filter(b => b.category === cat).reduce((s, b) => s + (b.weight || 0), 0),
+  }));
 
   return (
     <div className="slide-up">
       <div className="card-header">
         <h2>🔄 Reconciliation</h2>
+        {selected && <button className="btn btn-secondary btn-sm" onClick={() => { setSelected(null); setDetails({ collected: [], received: [] }); }}>← Back</button>}
       </div>
 
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div className="card-title" style={{ marginBottom: 16 }}>Select Route to Reconcile</div>
-        <div className="data-table-wrapper">
-          <table className="data-table">
-            <thead><tr><th>Driver</th><th>Vehicle</th><th>Date</th><th>Sites</th><th>Action</th></tr></thead>
-            <tbody>
-              {routes.slice(0, 10).map(r => (
-                <tr key={r.id} style={{ background: selectedRoute === r.id ? 'var(--bg-hover)' : undefined }}>
-                  <td style={{ fontWeight: 600 }}>{r.driverName}</td>
-                  <td>{r.vehicleNumber}</td>
-                  <td style={{ fontSize: '0.85rem' }}>{new Date(r.date).toLocaleDateString()}</td>
-                  <td>{r.siteNames?.length || 0} sites</td>
-                  <td><button className="btn btn-primary btn-sm" onClick={() => runReconciliation(r.id)} disabled={loading}>Run Check</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {!selected ? (
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: 12 }}>Select a Route to Reconcile</div>
+          <div className="data-table-wrapper">
+            <table className="data-table">
+              <thead><tr><th>Date</th><th>Driver</th><th>Vehicle</th><th>Status</th><th>Action</th></tr></thead>
+              <tbody>
+                {routes.map(r => (
+                  <tr key={r.id}>
+                    <td>{new Date(r.date).toLocaleDateString('en-IN')}</td>
+                    <td>{r.profiles?.name || r.driver_name || '—'}</td>
+                    <td style={{ fontFamily: 'monospace' }}>{r.vehicle_number || '—'}</td>
+                    <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
+                    <td><button className="btn btn-secondary btn-sm" onClick={() => viewRoute(r)}>Reconcile</button></td>
+                  </tr>
+                ))}
+                {routes.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 24 }}>No routes found</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      ) : loading ? <div className="loading-spinner" /> : (
+        <div>
+          {/* Route Summary */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
+            {[
+              { label: 'Bags Collected', val: details.collected.length, color: '#6366f1' },
+              { label: 'Bags Received', val: details.received.length, color: '#10b981' },
+              { label: 'Missing Bags', val: missingBags.length, color: missingBags.length > 0 ? '#ef4444' : '#10b981' },
+              { label: 'Total Weight', val: `${details.received.reduce((s, b) => s + (b.weight || 0), 0).toFixed(2)} kg`, color: '#f59e0b' },
+            ].map(s => (
+              <div key={s.label} className="stat-card" style={{ '--stat-color': s.color, padding: 16 }}>
+                <div className="stat-card-value" style={{ fontSize: '1.6rem', color: s.color }}>{s.val}</div>
+                <div className="stat-card-label">{s.label}</div>
+              </div>
+            ))}
+          </div>
 
-      {loading && <div className="loading-spinner" />}
-
-      {result && (
-        <div className="card slide-up">
-          <div className="card-title" style={{ marginBottom: 20 }}>Reconciliation Results</div>
-          <div className="recon-summary">
-            <div className="recon-stat">
-              <div className="recon-stat-value" style={{ color: 'var(--accent-info)' }}>{result.collected}</div>
-              <div className="recon-stat-label">Collected</div>
-            </div>
-            <div className="recon-stat">
-              <div className="recon-stat-value" style={{ color: 'var(--accent-primary)' }}>{result.received}</div>
-              <div className="recon-stat-label">Received</div>
-            </div>
-            <div className="recon-stat">
-              <div className="recon-stat-value" style={{ color: 'var(--accent-success)' }}>{result.matched}</div>
-              <div className="recon-stat-label">Matched</div>
-            </div>
-            <div className="recon-stat">
-              <div className="recon-stat-value" style={{ color: result.missingAtPlant > 0 ? 'var(--accent-danger)' : 'var(--accent-success)' }}>{result.missingAtPlant}</div>
-              <div className="recon-stat-label">Missing at Plant</div>
-            </div>
-            <div className="recon-stat">
-              <div className="recon-stat-value" style={{ color: result.unexpectedAtPlant > 0 ? 'var(--accent-warning)' : 'var(--accent-success)' }}>{result.unexpectedAtPlant}</div>
-              <div className="recon-stat-label">Unexpected</div>
+          {/* Category Breakdown */}
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div className="card-title" style={{ marginBottom: 12 }}>Category Breakdown</div>
+            <div className="data-table-wrapper">
+              <table className="data-table" style={{ fontSize: '0.85rem' }}>
+                <thead><tr><th>Category</th><th>Collected</th><th>Received</th><th>Difference</th><th>Collected Wt (kg)</th><th>Received Wt (kg)</th><th>Wt Diff</th></tr></thead>
+                <tbody>
+                  {['Yellow', 'Red', 'Blue', 'White'].map(cat => {
+                    const col = details.collected.filter(b => b.category === cat);
+                    const rec = details.received.filter(b => b.category === cat);
+                    const colWt = col.reduce((s, b) => s + (b.weight || 0), 0);
+                    const recWt = rec.reduce((s, b) => s + (b.weight || 0), 0);
+                    const diff = col.length - rec.length;
+                    const wtDiff = (colWt - recWt).toFixed(3);
+                    return (
+                      <tr key={cat} style={diff > 0 ? { background: 'rgba(239,68,68,0.06)' } : {}}>
+                        <td><span className={`badge badge-${cat}`}>{cat}</span></td>
+                        <td>{col.length}</td>
+                        <td>{rec.length}</td>
+                        <td style={{ fontWeight: 700, color: diff > 0 ? '#ef4444' : 'var(--accent-green)' }}>
+                          {diff > 0 ? `▲ ${diff}` : diff === 0 ? '✓' : `▼ ${Math.abs(diff)}`}
+                        </td>
+                        <td>{colWt.toFixed(3)}</td>
+                        <td>{recWt.toFixed(3)}</td>
+                        <td style={{ color: Math.abs(Number(wtDiff)) > 0.001 ? '#ef4444' : 'var(--accent-green)' }}>{wtDiff}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          {result.newDiscrepancies > 0 && (
-            <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius-md)', padding: 16 }}>
-              <div style={{ fontWeight: 600, color: 'var(--accent-danger)', marginBottom: 8 }}>⚠️ {result.newDiscrepancies} new discrepancies flagged</div>
-              {result.discrepancies?.map(d => (
-                <div key={d.id} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', padding: '4px 0' }}>
-                  • {d.barcode} — {d.type.replace(/_/g, ' ')}
-                </div>
-              ))}
+          {/* Missing Bags */}
+          {missingBags.length > 0 && (
+            <div className="card" style={{ border: '1px solid rgba(239,68,68,0.3)' }}>
+              <div className="card-title" style={{ color: '#ef4444', marginBottom: 12 }}>⚠️ Missing Bags ({missingBags.length})</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {missingBags.map(b => (
+                  <div key={b.id} className="sync-item" style={{ background: 'rgba(239,68,68,0.06)' }}>
+                    <div>
+                      <div style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.82rem' }}>{b.barcode}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{b.hospital_name} · <span className={`badge badge-${b.category}`} style={{ fontSize: '0.7rem' }}>{b.category}</span></div>
+                    </div>
+                    <button className="btn btn-danger btn-sm" onClick={() => createDiscrepancy(b, 'missing')} disabled={resolving === b.id}>
+                      {resolving === b.id ? '...' : '🚨 Log Discrepancy'}
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          {result.missingAtPlant === 0 && result.unexpectedAtPlant === 0 && (
-            <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 'var(--radius-md)', padding: 16, textAlign: 'center' }}>
-              <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>✅</div>
-              <div style={{ fontWeight: 600, color: 'var(--accent-success)' }}>All bags reconciled successfully</div>
+          {missingBags.length === 0 && details.collected.length > 0 && (
+            <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 10, padding: 20, textAlign: 'center', fontWeight: 700, color: 'var(--accent-green)' }}>
+              ✅ All {details.collected.length} bags accounted for — No discrepancies!
             </div>
           )}
         </div>

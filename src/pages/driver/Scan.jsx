@@ -1,123 +1,184 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { parseQRPayload } from '../../lib/qrGenerator';
 
 export default function DriverScan() {
   const { supabase, user } = useAuth();
-  const [barcode, setBarcode] = useState('');
-  const [result, setResult] = useState(null);
+  const [scanning, setScanning] = useState(false);
+  const [scannedBag, setScannedBag] = useState(null);
+  const [manualCode, setManualCode] = useState('');
+  const [status, setStatus] = useState('');
   const [error, setError] = useState('');
-  const [scannedBags, setScannedBags] = useState([]);
-  const [activeRouteId, setActiveRouteId] = useState(null);
+  const [confirming, setConfirming] = useState(false);
+  const [activeRoute, setActiveRoute] = useState(null);
+  const scannerRef = useRef(null);
+  const scannerInstanceRef = useRef(null);
 
   useEffect(() => {
-    async function getRoute() {
-      if (!user) return;
-      const { data } = await supabase.from('routes').select('id').eq('driver_id', user.id).eq('status', 'active').limit(1).single();
-      if (data) setActiveRouteId(data.id);
-    }
-    getRoute();
+    supabase.from('routes').select('*').eq('driver_id', user?.id).eq('status', 'active').single()
+      .then(({ data }) => { if (data) setActiveRoute(data); });
   }, [supabase, user]);
 
-  const handleScan = async (e) => {
-    e.preventDefault();
+  const startScanner = async () => {
     setError('');
-    setResult(null);
+    setScanning(true);
     try {
-      const { data: bag, error: fetchErr } = await supabase.from('bags').select('*, hospitals(name)').eq('barcode', barcode).single();
-      if (fetchErr || !bag) { setError(`Bag "${barcode}" not found`); return; }
-      setResult({ ...bag, hospitalName: bag.hospitals?.name || bag.hospital_name, createdAt: bag.created_at });
-    } catch { setError('Scan failed. Check connection.'); }
+      const { Html5Qrcode } = await import('html5-qrcode');
+      const scanner = new Html5Qrcode('qr-reader');
+      scannerInstanceRef.current = scanner;
+      await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        async (decodedText) => {
+          const bagId = parseQRPayload(decodedText);
+          if (bagId) {
+            await scanner.stop();
+            setScanning(false);
+            await lookupBag(bagId);
+          }
+        },
+        () => {}
+      );
+    } catch (err) {
+      setError('Camera not available. Use manual entry below.');
+      setScanning(false);
+    }
   };
 
-  const handleCollect = async () => {
-    if (!result) return;
-    try {
-      const payload = {
-          status: 'collected',
-          collected_at: new Date().toISOString(),
-          collected_by: user?.id,
-          route_id: activeRouteId,
-          gps_lat: 23.3441 + (Math.random() - 0.5) * 0.1,
-          gps_lng: 85.3096 + (Math.random() - 0.5) * 0.1,
-      };
-      const { data, error } = await supabase.from('bags').update(payload).eq('id', result.id).select().single();
-      if (error) throw error;
-      
-      const updated = { ...data, hospitalName: result.hospitalName };
-      setScannedBags(prev => [updated, ...prev]);
-      setResult(null);
-      setBarcode('');
-      
-      // Audit log (async)
-      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'BAG_COLLECTED', entity: 'BAG', entity_id: result.id, details: `Bag collected at site.` }).then();
-    } catch { setError('Collection failed'); }
+  const stopScanner = async () => {
+    try { await scannerInstanceRef.current?.stop(); } catch (_) {}
+    setScanning(false);
   };
+
+  const lookupBag = async (bagId) => {
+    setError(''); setScannedBag(null);
+    const { data, error: err } = await supabase.from('bags').select('*, hospitals(name, district)').eq('barcode', bagId).single();
+    if (err || !data) { setError(`Bag not found: ${bagId}`); return; }
+    if (data.status === 'collected') { setError(`Bag ${bagId} already collected.`); return; }
+    if (data.status !== 'created') { setError(`Bag ${bagId} is in status "${data.status}" — cannot collect.`); return; }
+    setScannedBag(data);
+    setStatus('');
+  };
+
+  const handleManual = async (e) => {
+    e.preventDefault();
+    if (manualCode.trim()) await lookupBag(manualCode.trim());
+  };
+
+  const confirmCollection = async () => {
+    if (!scannedBag) return;
+    setConfirming(true);
+    try {
+      let gpsLat = null, gpsLng = null;
+      try {
+        const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
+        gpsLat = pos.coords.latitude;
+        gpsLng = pos.coords.longitude;
+      } catch (_) {}
+
+      await supabase.from('bags').update({
+        status: 'collected',
+        collected_at: new Date().toISOString(),
+        collected_by: user?.id,
+        gps_lat: gpsLat,
+        gps_lng: gpsLng,
+        route_id: activeRoute?.id || null,
+      }).eq('id', scannedBag.id);
+
+      supabase.from('scan_events').insert({
+        bag_id: scannedBag.id, barcode: scannedBag.barcode,
+        scanned_by: user?.id, scanner_name: user?.name,
+        scan_type: 'collection', gps_lat: gpsLat, gps_lng: gpsLng,
+        route_id: activeRoute?.id || null,
+      }).then();
+
+      supabase.from('audit_logs').insert({
+        user_id: user?.id, user_name: user?.name,
+        action: 'BAG_COLLECTED', entity: 'BAG', entity_id: scannedBag.id,
+        details: `Bag ${scannedBag.barcode} collected from ${scannedBag.hospital_name}`,
+      }).then();
+
+      setStatus(`✅ Bag ${scannedBag.barcode} collected!`);
+      setScannedBag(null);
+      setManualCode('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const CATEGORY_COLORS = { Yellow: '#fbbf24', Red: '#ef4444', Blue: '#3b82f6', White: '#94a3b8' };
 
   return (
     <div className="slide-up">
       <div className="card-header">
-        <h2>📱 Scan Barcode</h2>
-        <span className="badge badge-active">{scannedBags.length} scanned</span>
+        <h2>📱 Scan Bag</h2>
+        {activeRoute && <span className="badge badge-active">Route Active</span>}
       </div>
 
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ textAlign: 'center', padding: '32px 0 24px', fontSize: '3rem' }}>📱</div>
-        <form onSubmit={handleScan}>
-          <div className="form-group">
-            <label className="form-label">Barcode / QR Code</label>
-            <input
-              className="form-input"
-              value={barcode}
-              onChange={e => setBarcode(e.target.value.toUpperCase())}
-              placeholder="Enter barcode (e.g., BMW20250001)"
-              autoFocus
-              style={{ textAlign: 'center', fontSize: '1.1rem', fontFamily: 'monospace', letterSpacing: '0.1em' }}
-            />
-          </div>
-          <button type="submit" className="btn btn-primary btn-lg" style={{ width: '100%' }}>🔍 Lookup Bag</button>
-        </form>
-        <p style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 12 }}>
-          Tip: Enter any barcode from the demo data (BMW2025XXXX format)
-        </p>
-      </div>
+      {status && <div style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: 'var(--accent-green)', fontWeight: 600 }}>{status}</div>}
+      {error && <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#ef4444' }}>{error}</div>}
 
-      {error && <div className="login-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {!scanning && !scannedBag && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 32 }}>
+            <div style={{ fontSize: '3rem' }}>📷</div>
+            <button className="btn btn-primary btn-lg" onClick={startScanner} style={{ width: '100%', maxWidth: 320 }}>
+              Open Camera & Scan QR
+            </button>
+          </div>
 
-      {result && (
-        <div className="card slide-up" style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <span style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '1.2rem' }}>{result.barcode}</span>
-            <span className={`badge badge-${result.status}`}>{result.status}</span>
+          <div className="card">
+            <div className="card-title" style={{ marginBottom: 12 }}>Manual Entry</div>
+            <form onSubmit={handleManual} style={{ display: 'flex', gap: 8 }}>
+              <input className="form-input" placeholder="JH-DGH-HCF0001-Y-20250509-000001" value={manualCode}
+                onChange={e => setManualCode(e.target.value)} style={{ flex: 1, fontFamily: 'monospace' }} />
+              <button type="submit" className="btn btn-primary">Lookup</button>
+            </form>
           </div>
-          <div className="form-row" style={{ marginBottom: 12 }}>
-            <div><span className="form-label">Hospital</span><div>{result.hospitalName}</div></div>
-            <div><span className="form-label">Category</span><div><span className={`badge badge-${result.category}`}>{result.category}</span></div></div>
-          </div>
-          <div className="form-row" style={{ marginBottom: 16 }}>
-            <div><span className="form-label">Weight</span><div>{result.weight} kg</div></div>
-            <div><span className="form-label">Created</span><div style={{ fontSize: '0.85rem' }}>{new Date(result.createdAt).toLocaleString()}</div></div>
-          </div>
-          <button className="btn btn-success btn-lg" style={{ width: '100%' }} onClick={handleCollect}>
-            ✅ Confirm Collection
-          </button>
         </div>
       )}
 
-      {scannedBags.length > 0 && (
+      {scanning && (
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <div id="qr-reader" ref={scannerRef} style={{ width: '100%', maxWidth: 400, borderRadius: 12, overflow: 'hidden' }} />
+          <button className="btn btn-secondary" onClick={stopScanner}>✕ Cancel Scan</button>
+        </div>
+      )}
+
+      {scannedBag && (
         <div className="card">
-          <div className="card-title" style={{ marginBottom: 12 }}>Collected This Session</div>
-          {scannedBags.map(b => (
-            <div key={b.id} className="sync-item">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div className="sync-item-status synced" />
-                <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{b.barcode}</span>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <span className={`badge badge-${b.category}`}>{b.category}</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{b.weight} kg</span>
-              </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <div style={{ width: 14, height: 14, borderRadius: '50%', background: CATEGORY_COLORS[scannedBag.category] }} />
+            <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>Bag Found</span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+            <div>
+              <div className="form-label">Hospital</div>
+              <div style={{ fontWeight: 600 }}>{scannedBag.hospital_name}</div>
             </div>
-          ))}
+            <div>
+              <div className="form-label">Category</div>
+              <span className={`badge badge-${scannedBag.category}`}>{scannedBag.category}</span>
+            </div>
+            <div>
+              <div className="form-label">Bag ID</div>
+              <div style={{ fontFamily: 'monospace', fontSize: '0.8rem', wordBreak: 'break-all', fontWeight: 600 }}>{scannedBag.barcode}</div>
+            </div>
+            <div>
+              <div className="form-label">Status</div>
+              <span className={`badge badge-${scannedBag.status}`}>{scannedBag.status}</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" onClick={() => setScannedBag(null)} style={{ flex: 1 }}>← Scan Another</button>
+            <button className="btn btn-primary" onClick={confirmCollection} disabled={confirming} style={{ flex: 2 }}>
+              {confirming ? 'Confirming...' : '✅ Confirm Collection'}
+            </button>
+          </div>
         </div>
       )}
     </div>
