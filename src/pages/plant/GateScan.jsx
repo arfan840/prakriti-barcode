@@ -10,26 +10,37 @@ export default function PlantGateScan() {
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState(false);
   const scannerInstanceRef = useRef(null);
+  const scannedRef = useRef([]);
+  const processingRef = useRef(false);
+
+  // Sync state to ref so closure always has latest
+  React.useEffect(() => { scannedRef.current = scanned; }, [scanned]);
 
   const processCode = async (rawCode) => {
+    if (processingRef.current) return;
     const bagId = parseQRPayload(rawCode) || rawCode.trim();
     if (!bagId) return;
 
-    // Prevent duplicate scans in this session
-    if (scanned.find(s => s.barcode === bagId)) {
-      setError(`Already scanned: ${bagId}`);
+    // Prevent duplicate scans instantly using Ref
+    if (scannedRef.current.find(s => s.barcode === bagId)) {
+      // Don't spam errors if holding camera on same code
       return;
     }
 
-    const { data, error: err } = await supabase.from('bags').select('*').eq('barcode', bagId).single();
-    if (err || !data) { setError(`Not found: ${bagId}`); return; }
-    if (data.status === 'received' || data.status === 'in_batch' || data.status === 'treated') {
-      setError(`Bag ${bagId} already received`);
-      return;
+    processingRef.current = true;
+    try {
+      const { data, error: err } = await supabase.from('bags').select('*').eq('barcode', bagId).single();
+      if (err || !data) { setError(`Not found: ${bagId}`); return; }
+      if (data.status === 'received' || data.status === 'in_batch' || data.status === 'treated') {
+        setError(`Bag ${bagId} already received`);
+        return;
+      }
+      setScanned(prev => [...prev, data]);
+      setError('');
+    } finally {
+      // Small timeout to prevent hyper-scanning the same code in 10ms
+      setTimeout(() => { processingRef.current = false; }, 1000);
     }
-
-    setScanned(prev => [...prev, data]);
-    setError('');
   };
 
   const startScanner = async () => {

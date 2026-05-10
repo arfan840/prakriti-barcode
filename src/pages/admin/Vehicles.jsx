@@ -49,6 +49,18 @@ export default function Vehicles() {
     }
   };
 
+  const handleDelete = async (id, number) => {
+    if (!window.confirm(`Are you sure you want to delete vehicle ${number}?`)) return;
+    try {
+      const { error } = await supabase.from('vehicles').delete().eq('id', id);
+      if (error) throw error;
+      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'VEHICLE_DELETED', entity: 'VEHICLE', details: `Deleted Vehicle: ${number}` }).then();
+      await load();
+    } catch (err) {
+      alert('Error deleting: ' + (err.message || JSON.stringify(err)));
+    }
+  };
+
   return (
     <div className="slide-up">
       <div className="card-header">
@@ -69,7 +81,10 @@ export default function Vehicles() {
                   <td>{v.type}</td>
                   <td>{v.profiles?.name || <span style={{ color: 'var(--text-muted)' }}>Unassigned</span>}</td>
                   <td><span className={`badge ${v.status === 'active' ? 'badge-active' : 'badge-created'}`}>{v.status}</span></td>
-                  <td><button className="btn btn-secondary btn-sm" onClick={() => openEdit(v)}>Edit</button></td>
+                  <td style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(v)}>Edit</button>
+                    <button className="btn btn-primary btn-sm" style={{ background: 'var(--accent-danger)' }} onClick={() => handleDelete(v.id, v.number)}>Delete</button>
+                  </td>
                 </tr>
               ))}
               {vehicles.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>No vehicles yet</td></tr>}

@@ -42,6 +42,10 @@ export default function Hospitals() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!form.name || !form.hcf_code || !form.district || !form.address || !form.contact) {
+      alert('Please fill out all required fields marked with * (Name, HCF Code, District, Address, Contact).');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -50,18 +54,33 @@ export default function Hospitals() {
         beds: form.beds ? Number(form.beds) : null,
       };
       if (editing) {
-        await supabase.from('hospitals').update(payload).eq('id', editing.id);
+        const { error } = await supabase.from('hospitals').update(payload).eq('id', editing.id);
+        if (error) throw error;
         supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'HCF_UPDATED', entity: 'HOSPITAL', entity_id: editing.id, details: `Updated HCF: ${form.name}` }).then();
       } else {
-        await supabase.from('hospitals').insert(payload);
+        const { error } = await supabase.from('hospitals').insert(payload);
+        if (error) throw error;
         supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'HCF_CREATED', entity: 'HOSPITAL', details: `Created HCF: ${form.name}` }).then();
       }
       await load();
       setShowModal(false);
     } catch (err) {
-      alert(err.message);
+      console.error('Save error:', err);
+      alert('Database Error: ' + (err.message || JSON.stringify(err)));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete HCF ${name}?`)) return;
+    try {
+      const { error } = await supabase.from('hospitals').delete().eq('id', id);
+      if (error) throw error;
+      supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'HCF_DELETED', entity: 'HOSPITAL', details: `Deleted HCF: ${name}` }).then();
+      await load();
+    } catch (err) {
+      alert('Error deleting: ' + (err.message || JSON.stringify(err)));
     }
   };
 
@@ -106,7 +125,10 @@ export default function Hospitals() {
                   <td>{h.district}</td>
                   <td>{h.beds || '—'}</td>
                   <td style={{ fontSize: '0.8rem' }}>{h.contact}</td>
-                  <td><button className="btn btn-secondary btn-sm" onClick={() => openEdit(h)}>Edit</button></td>
+                  <td style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(h)}>Edit</button>
+                    <button className="btn btn-primary btn-sm" style={{ background: 'var(--accent-danger)' }} onClick={() => handleDelete(h.id, h.name)}>Delete</button>
+                  </td>
                 </tr>
               ))}
               {filtered.length === 0 && (

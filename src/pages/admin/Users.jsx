@@ -49,6 +49,17 @@ export default function Users() {
     setRefresh(r => r + 1);
   };
 
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete user ${name}? This will fail if the user has recorded any history in the system.`)) return;
+    try {
+      const { error } = await supabase.from('profiles').delete().eq('id', id);
+      if (error) throw error;
+      setRefresh(r => r + 1);
+    } catch (err) {
+      alert('Error deleting user: ' + (err.message || JSON.stringify(err)));
+    }
+  };
+
   return (
     <div className="slide-up">
       <div className="card-header">
@@ -81,7 +92,10 @@ export default function Users() {
                   <td style={{ color: 'var(--text-secondary)' }}>{u.email}</td>
                   <td><span className={`badge badge-${u.role === 'plant_head' ? 'treated' : u.role === 'driver' ? 'active' : 'pending'}`}>{ROLES.find(r => r.value === u.role)?.label || u.role}</span></td>
                   <td>{u.phone}</td>
-                  <td><button className="btn btn-secondary btn-sm" onClick={() => { setForm({ name: u.name, email: u.email, role: u.role, phone: u.phone, password: '' }); setEditId(u.id); setShowModal(true); }}>Edit</button></td>
+                  <td style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => { setForm({ name: u.name, email: u.email, role: u.role, phone: u.phone, password: '' }); setEditId(u.id); setShowModal(true); }}>Edit</button>
+                    <button className="btn btn-primary btn-sm" style={{ background: 'var(--accent-danger)' }} onClick={() => handleDelete(u.id, u.name)}>Delete</button>
+                  </td>
                 </tr>
               ))}
             </tbody>

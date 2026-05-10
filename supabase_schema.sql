@@ -38,6 +38,15 @@ CREATE TABLE IF NOT EXISTS public.hospitals (
   contact TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure columns exist if the table was created previously
+ALTER TABLE public.hospitals ADD COLUMN IF NOT EXISTS hcf_code TEXT UNIQUE;
+ALTER TABLE public.hospitals ADD COLUMN IF NOT EXISTS hospital_type TEXT;
+ALTER TABLE public.hospitals ADD COLUMN IF NOT EXISTS bedded BOOLEAN DEFAULT true;
+ALTER TABLE public.hospitals ADD COLUMN IF NOT EXISTS beds INTEGER;
+ALTER TABLE public.hospitals ADD COLUMN IF NOT EXISTS state TEXT DEFAULT 'JH';
+ALTER TABLE public.hospitals ADD COLUMN IF NOT EXISTS pincode TEXT;
+
 ALTER TABLE public.hospitals ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations for authenticated users on hospitals" ON public.hospitals;
 CREATE POLICY "Allow all operations for authenticated users on hospitals" ON public.hospitals FOR ALL USING (auth.role() = 'authenticated');
@@ -70,6 +79,12 @@ CREATE TABLE IF NOT EXISTS public.routes (
   status TEXT DEFAULT 'active',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure columns exist if the table was created previously
+ALTER TABLE public.routes ADD COLUMN IF NOT EXISTS driver_name TEXT;
+ALTER TABLE public.routes ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES public.vehicles(id);
+ALTER TABLE public.routes ADD COLUMN IF NOT EXISTS vehicle_number TEXT;
+
 ALTER TABLE public.routes ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations for authenticated users on routes" ON public.routes;
 CREATE POLICY "Allow all operations for authenticated users on routes" ON public.routes FOR ALL USING (auth.role() = 'authenticated');
@@ -102,6 +117,10 @@ CREATE TABLE IF NOT EXISTS public.batches (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   treated_at TIMESTAMPTZ
 );
+
+-- Ensure columns exist if the table was created previously
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS treated_at TIMESTAMPTZ;
+
 ALTER TABLE public.batches ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations for authenticated users on batches" ON public.batches;
 CREATE POLICY "Allow all operations for authenticated users on batches" ON public.batches FOR ALL USING (auth.role() = 'authenticated');
@@ -130,6 +149,14 @@ CREATE TABLE IF NOT EXISTS public.bags (
   route_id UUID REFERENCES public.routes(id),
   batch_id UUID REFERENCES public.batches(id)
 );
+
+-- Ensure columns exist if the table was created previously
+ALTER TABLE public.bags ADD COLUMN IF NOT EXISTS hcf_code TEXT;
+ALTER TABLE public.bags ADD COLUMN IF NOT EXISTS district TEXT;
+ALTER TABLE public.bags ADD COLUMN IF NOT EXISTS state TEXT DEFAULT 'JH';
+ALTER TABLE public.bags ADD COLUMN IF NOT EXISTS route_id UUID REFERENCES public.routes(id);
+ALTER TABLE public.bags ADD COLUMN IF NOT EXISTS batch_id UUID REFERENCES public.batches(id);
+
 ALTER TABLE public.bags ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations for authenticated users on bags" ON public.bags;
 CREATE POLICY "Allow all operations for authenticated users on bags" ON public.bags FOR ALL USING (auth.role() = 'authenticated');
@@ -152,6 +179,12 @@ CREATE TABLE IF NOT EXISTS public.scan_events (
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure columns exist if the table was created previously
+ALTER TABLE public.scan_events ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES public.vehicles(id);
+ALTER TABLE public.scan_events ADD COLUMN IF NOT EXISTS route_id UUID REFERENCES public.routes(id);
+ALTER TABLE public.scan_events ADD COLUMN IF NOT EXISTS scanner_name TEXT;
+
 ALTER TABLE public.scan_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations for authenticated users on scan_events" ON public.scan_events;
 CREATE POLICY "Allow all operations for authenticated users on scan_events" ON public.scan_events FOR ALL USING (auth.role() = 'authenticated');
@@ -175,6 +208,11 @@ CREATE TABLE IF NOT EXISTS public.manifests (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   closed_at TIMESTAMPTZ
 );
+
+-- Ensure columns exist if the table was created previously
+ALTER TABLE public.manifests ADD COLUMN IF NOT EXISTS route_id UUID REFERENCES public.routes(id);
+ALTER TABLE public.manifests ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+
 ALTER TABLE public.manifests ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations for authenticated users on manifests" ON public.manifests;
 CREATE POLICY "Allow all operations for authenticated users on manifests" ON public.manifests FOR ALL USING (auth.role() = 'authenticated');
@@ -195,6 +233,11 @@ CREATE TABLE IF NOT EXISTS public.discrepancies (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   resolved_at TIMESTAMPTZ
 );
+
+-- Ensure columns exist if the table was created previously
+ALTER TABLE public.discrepancies ADD COLUMN IF NOT EXISTS route_id UUID REFERENCES public.routes(id);
+ALTER TABLE public.discrepancies ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+
 ALTER TABLE public.discrepancies ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations for authenticated users on discrepancies" ON public.discrepancies;
 CREATE POLICY "Allow all operations for authenticated users on discrepancies" ON public.discrepancies FOR ALL USING (auth.role() = 'authenticated');
@@ -215,6 +258,8 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow read/insert operations for authenticated users on audit logs" ON public.audit_logs;
 DROP POLICY IF EXISTS "Allow insert operations for authenticated users on audit logs" ON public.audit_logs;
+DROP POLICY IF EXISTS "Allow read for authenticated users on audit logs" ON public.audit_logs;
+DROP POLICY IF EXISTS "Allow insert for authenticated users on audit logs" ON public.audit_logs;
 CREATE POLICY "Allow read for authenticated users on audit logs" ON public.audit_logs FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Allow insert for authenticated users on audit logs" ON public.audit_logs FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 -- No UPDATE or DELETE policy — audit logs are immutable
