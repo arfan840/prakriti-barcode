@@ -56,19 +56,9 @@ const navConfig = {
     title: 'Driver App',
     sections: [
       {
-        title: "Today's Route",
+        title: 'Driver Operations',
         items: [
-          { path: '/driver', icon: '🗺️', label: 'Route Overview', end: true },
-          { path: '/driver/checkin', icon: '📍', label: 'GPS Check-in' },
-          { path: '/driver/scan', icon: '📱', label: 'Scan Bag' },
-        ]
-      },
-      {
-        title: 'Collection',
-        items: [
-          { path: '/driver/weigh', icon: '⚖️', label: 'Weigh Bag' },
-          { path: '/driver/manifest', icon: '📋', label: 'Manifest' },
-          { path: '/driver/sync', icon: '☁️', label: 'Sync Queue' },
+          { path: '/driver', icon: '📱', label: 'Scanner & Route', end: true },
         ]
       }
     ]

@@ -10,6 +10,7 @@ export default function PlantBatches() {
   const [treatmentType, setTreatmentType] = useState('Autoclave');
   const [creating, setCreating] = useState(false);
   const [bagFilter, setBagFilter] = useState('');
+  const [colorFilter, setColorFilter] = useState('');
 
   const load = async () => {
     const [{ data: b }, { data: bags }] = await Promise.all([
@@ -39,14 +40,23 @@ export default function PlantBatches() {
       const { data: batch, error } = await supabase.from('batches').insert({
         batch_number: batchNum,
         bag_count: bags.length,
-        total_weight: Number(totalWeight.toFixed(3)),
+        total_weight: Number(totalWeight.toFixed(3)) || 0,
         treatment_type: treatmentType,
-        operator: user?.name,
+        operator: user?.name || 'Unknown',
         status: 'pending',
       }).select().single();
-      if (error) throw error;
+      
+      if (error) {
+        console.error('Batch Create Error:', error);
+        throw new Error(`Batch Creation Failed: ${error.message}`);
+      }
+      if (!batch) throw new Error('Batch Creation Failed: No data returned from database.');
 
-      await supabase.from('bags').update({ status: 'in_batch', batch_id: batch.id }).in('id', bags.map(b => b.id));
+      const { error: updateError } = await supabase.from('bags').update({ status: 'in_batch', batch_id: batch.id }).in('id', bags.map(b => b.id));
+      if (updateError) {
+        console.error('Bags Update Error:', updateError);
+        throw new Error(`Batch created, but failed to link bags: ${updateError.message}`);
+      }
 
       supabase.from('audit_logs').insert({ user_id: user?.id, user_name: user?.name, action: 'BATCH_CREATED', entity: 'BATCH', entity_id: batch.id, details: `Batch ${batchNum} created with ${bags.length} bags, ${totalWeight.toFixed(3)} kg, treatment: ${treatmentType}` }).then();
 
@@ -60,7 +70,10 @@ export default function PlantBatches() {
     }
   };
 
-  const filteredBags = availBags.filter(b => !bagFilter || b.category === bagFilter || b.hospital_name?.toLowerCase().includes(bagFilter.toLowerCase()));
+  const filteredBags = availBags.filter(b => 
+    (!bagFilter || b.hospital_name?.toLowerCase().includes(bagFilter.toLowerCase()) || b.barcode?.toLowerCase().includes(bagFilter.toLowerCase())) &&
+    (!colorFilter || b.category === colorFilter)
+  );
 
   return (
     <div className="slide-up">
@@ -76,8 +89,18 @@ export default function PlantBatches() {
           <div className="card-title" style={{ marginBottom: 12 }}>Create New Batch from Received Bags</div>
           <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Filter Bags</label>
-              <input className="form-input" placeholder="Category or hospital..." value={bagFilter} onChange={e => setBagFilter(e.target.value)} />
+              <label className="form-label">Search</label>
+              <input className="form-input" placeholder="Hospital or barcode..." value={bagFilter} onChange={e => setBagFilter(e.target.value)} />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Bag Colour</label>
+              <select className="form-select" value={colorFilter} onChange={e => setColorFilter(e.target.value)}>
+                <option value="">All Colours</option>
+                <option value="Yellow">Yellow</option>
+                <option value="Red">Red</option>
+                <option value="Blue">Blue</option>
+                <option value="White">White</option>
+              </select>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Treatment Method</label>
