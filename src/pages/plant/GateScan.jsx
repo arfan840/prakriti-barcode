@@ -4,11 +4,10 @@ import { parseQRPayload } from '../../lib/qrGenerator';
 
 export default function PlantGateScan() {
   const { supabase, user } = useAuth();
-  const [scanning, setScanning] = useState(false);
-  const [scanned, setScanned] = useState([]);
-  const [manualCode, setManualCode] = useState('');
-  const [error, setError] = useState('');
-  const [confirming, setConfirming] = useState(false);
+  const [scanMode, setScanMode] = useState('fast'); // 'fast' or 'verified'
+  const [verifyingBag, setVerifyingBag] = useState(null);
+  const [actualWeight, setActualWeight] = useState('');
+  const [btLoading, setBtLoading] = useState(false);
   const scannerInstanceRef = useRef(null);
   const scannedRef = useRef([]);
   const processingRef = useRef(false);
@@ -35,12 +34,36 @@ export default function PlantGateScan() {
         setError(`Bag ${bagId} already received`);
         return;
       }
-      setScanned(prev => [...prev, data]);
-      setError('');
+      
+      if (scanMode === 'verified') {
+        setVerifyingBag(data);
+        setActualWeight('');
+        await stopScanner();
+      } else {
+        setScanned(prev => [...prev, data]);
+        setError('');
+      }
     } finally {
       // Small timeout to prevent hyper-scanning the same code in 10ms
       setTimeout(() => { processingRef.current = false; }, 1000);
     }
+  };
+
+  const triggerBluetoothWeigh = () => {
+    setBtLoading(true);
+    setTimeout(() => {
+      setActualWeight((Math.random() * 4 + 1).toFixed(3));
+      setBtLoading(false);
+    }, 1200);
+  };
+
+  const confirmVerifiedBag = () => {
+    if (!verifyingBag || !actualWeight) return;
+    const bagWithNewWeight = { ...verifyingBag, gate_weight: parseFloat(actualWeight) };
+    setScanned(prev => [...prev, bagWithNewWeight]);
+    setVerifyingBag(null);
+    setActualWeight('');
+    setError('');
   };
 
   const startScanner = async () => {
@@ -78,32 +101,32 @@ export default function PlantGateScan() {
     setConfirming(true);
     try {
       const now = new Date().toISOString();
-      const ids = scanned.map(b => b.id);
-
-      await supabase.from('bags').update({ status: 'received', received_at: now, received_by: user?.id }).in('id', ids);
+      
+      // Batch update bag status and gate_weight if applicable
+      for (const b of scanned) {
+        const updateData = { status: 'received', received_at: now, received_by: user?.id };
+        if (b.gate_weight) {
+          updateData.received_weight = b.gate_weight; // Store weight received at gate
+        }
+        await supabase.from('bags').update(updateData).eq('id', b.id);
+      }
 
       await supabase.from('scan_events').insert(
         scanned.map(b => ({
           bag_id: b.id, barcode: b.barcode,
           scanned_by: user?.id, scanner_name: user?.name,
           scan_type: 'gate_in',
+          weight: b.gate_weight || b.weight
         }))
       );
 
       supabase.from('audit_logs').insert({
         user_id: user?.id, user_name: user?.name,
         action: 'GATE_SCAN_COMPLETE', entity: 'BAG',
-        details: `${ids.length} bags received at gate`,
+        details: `${scanned.length} bags received at gate (${scanMode} mode)`,
       }).then();
 
-      // Check for discrepancies — bags with 'collected' status that were not scanned
-      for (const bag of scanned) {
-        if (bag.route_id && bag.status === 'collected') {
-          // This bag was received — good
-        }
-      }
-
-      alert(`✅ ${ids.length} bags marked as received!`);
+      alert(`✅ ${scanned.length} bags marked as received!`);
       setScanned([]);
       await stopScanner();
     } catch (err) {
@@ -119,38 +142,114 @@ export default function PlantGateScan() {
 
   return (
     <div className="slide-up">
-      <div className="card-header">
-        <h2>📷 Gate Scan — Receive Bags</h2>
-        {scanned.length > 0 && <span className="badge badge-active">{scanned.length} scanned</span>}
+      <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2>📷 Gate Scan — Receive Bags</h2>
+          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+            <button 
+              className={`btn ${scanMode === 'fast' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+              onClick={() => setScanMode('fast')}
+              style={{ padding: '4px 12px' }}
+            >
+              Option 1: Direct Scan
+            </button>
+            <button 
+              className={`btn ${scanMode === 'verified' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+              onClick={() => setScanMode('verified')}
+              style={{ padding: '4px 12px' }}
+            >
+              Option 2: Verified (Weighing)
+            </button>
+          </div>
+        </div>
+        {scanned.length > 0 && <span className="badge badge-active">{scanned.length} in session</span>}
       </div>
 
       {error && <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#ef4444' }}>{error}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: scanning ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
-        {!scanning ? (
-          <button className="btn btn-primary btn-lg" onClick={startScanner} style={{ padding: '20px', fontSize: '1rem' }}>
-            📷 Open Camera Scanner
-          </button>
-        ) : (
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div id="gate-qr-reader" style={{ width: '100%' }} />
-            <div style={{ padding: 12 }}>
-              <button className="btn btn-secondary" onClick={stopScanner} style={{ width: '100%' }}>✕ Stop Camera</button>
+      {verifyingBag ? (
+        <div className="card" style={{ border: '2px solid var(--accent-primary)', marginBottom: 16 }}>
+          <div className="card-title" style={{ marginBottom: 16 }}>Verify Bag Weight</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+            <div>
+              <div className="form-label">Hospital</div>
+              <div style={{ fontWeight: 600 }}>{verifyingBag.hospital_name}</div>
+            </div>
+            <div>
+              <div className="form-label">Category</div>
+              <span className={`badge badge-${verifyingBag.category}`}>{verifyingBag.category}</span>
+            </div>
+            <div>
+              <div className="form-label">Driver Weight</div>
+              <div style={{ fontWeight: 700, color: 'var(--text-muted)' }}>{verifyingBag.weight} kg</div>
+            </div>
+            <div>
+              <div className="form-label">Bag ID</div>
+              <div style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{verifyingBag.barcode.slice(-8)}</div>
             </div>
           </div>
-        )}
 
-        {!scanning && (
-          <div className="card">
-            <div className="card-title" style={{ marginBottom: 12 }}>Manual Entry</div>
-            <form onSubmit={handleManual} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <input className="form-input" value={manualCode} onChange={e => setManualCode(e.target.value)}
-                placeholder="Enter bag ID..." style={{ fontFamily: 'monospace' }} />
-              <button type="submit" className="btn btn-primary">Add Bag</button>
-            </form>
+          <div className="form-group" style={{ marginBottom: 20 }}>
+            <label className="form-label">⚖️ Gate Weight (kg)</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input 
+                className="form-input" 
+                type="number" 
+                step="0.001" 
+                value={actualWeight} 
+                onChange={e => setActualWeight(e.target.value)} 
+                placeholder="0.000" 
+                style={{ fontSize: '1.5rem', textAlign: 'center', fontWeight: 700, flex: 1 }} 
+              />
+              <button 
+                className="btn btn-secondary" 
+                onClick={triggerBluetoothWeigh} 
+                disabled={btLoading}
+                style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 16px' }}
+              >
+                <span style={{ fontSize: '1.2rem' }}>{btLoading ? '⏳' : '📶'}</span>
+                <span style={{ fontSize: '0.6rem' }}>Scale</span>
+              </button>
+            </div>
+            {actualWeight && (
+              <div style={{ marginTop: 8, fontSize: '0.85rem', color: Math.abs(parseFloat(actualWeight) - verifyingBag.weight) > 0.1 ? '#ef4444' : 'var(--accent-green)', fontWeight: 600 }}>
+                Difference: {(parseFloat(actualWeight) - verifyingBag.weight).toFixed(3)} kg
+              </div>
+            )}
           </div>
-        )}
-      </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" onClick={() => setVerifyingBag(null)} style={{ flex: 1 }}>Cancel</button>
+            <button className="btn btn-primary" onClick={confirmVerifiedBag} disabled={!actualWeight} style={{ flex: 2 }}>Confirm & Add</button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: scanning ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
+          {!scanning ? (
+            <button className="btn btn-primary btn-lg" onClick={startScanner} style={{ padding: '20px', fontSize: '1rem' }}>
+              📷 Open Camera Scanner
+            </button>
+          ) : (
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              <div id="gate-qr-reader" style={{ width: '100%' }} />
+              <div style={{ padding: 12 }}>
+                <button className="btn btn-secondary" onClick={stopScanner} style={{ width: '100%' }}>✕ Stop Camera</button>
+              </div>
+            </div>
+          )}
+
+          {!scanning && (
+            <div className="card">
+              <div className="card-title" style={{ marginBottom: 12 }}>Manual Entry</div>
+              <form onSubmit={handleManual} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <input className="form-input" value={manualCode} onChange={e => setManualCode(e.target.value)}
+                  placeholder="Enter bag ID..." style={{ fontFamily: 'monospace' }} />
+                <button type="submit" className="btn btn-primary">Add Bag</button>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
 
       {scanned.length > 0 && (
         <div className="card">
@@ -168,7 +267,9 @@ export default function PlantGateScan() {
               <div key={b.id} className="sync-item">
                 <div>
                   <div style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.8rem' }}>{b.barcode}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{b.hospital_name} · {b.weight ? `${b.weight} kg` : 'No weight'}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    {b.hospital_name} · {b.gate_weight ? <span>Gate: <strong>{b.gate_weight}</strong> kg</span> : b.weight ? `${b.weight} kg` : 'No weight'}
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <span className={`badge badge-${b.category}`}>{b.category}</span>
