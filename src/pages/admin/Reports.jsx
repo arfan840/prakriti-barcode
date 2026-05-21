@@ -45,7 +45,7 @@ function ReportTable({ data, filters }) {
               <th rowSpan={2}>Type</th>
               <th rowSpan={2}>Bedded</th>
               {CATEGORIES.map(cat => (
-                <th key={cat} colSpan={4} style={{ textAlign: 'center', background: `var(--cat-${cat.toLowerCase()}-bg, var(--surface))` }}>
+                <th key={cat} colSpan={4} className={`cat-header cat-${cat.toLowerCase()}`} style={{ textAlign: 'center', background: `var(--cat-${cat.toLowerCase()}-bg, var(--surface))` }}>
                   {cat} Bags
                 </th>
               ))}
@@ -69,7 +69,7 @@ function ReportTable({ data, filters }) {
               </td></tr>
             )}
             {data.map((row, i) => {
-              const diff = ((row.total_gen_weight || 0) - (row.total_rec_weight || 0)).toFixed(3);
+              const diff = ((row.total_rec_weight || 0) - (row.total_gen_weight || 0)).toFixed(3);
               const hasDiff = Math.abs(Number(diff)) > 0.001;
               return (
                 <tr key={i} style={hasDiff ? { background: 'rgba(239,68,68,0.06)' } : {}}>
@@ -88,7 +88,7 @@ function ReportTable({ data, filters }) {
                   <td style={{ fontWeight: 600 }}>{row.total_gen_bags || 0}</td>
                   <td style={{ fontWeight: 600 }}>{row.total_rec_bags || 0}</td>
                   <td style={{ fontWeight: 700, color: hasDiff ? '#ef4444' : 'var(--accent-green)' }}>
-                    {hasDiff ? `▲ ${Math.abs(diff)}` : '0.000'}
+                    {hasDiff ? (Number(diff) > 0 ? `+${diff}` : diff) : '0.000'}
                   </td>
                 </tr>
               );
@@ -109,7 +109,7 @@ function ReportTable({ data, filters }) {
                 })}
                 <td>{grandTotals.total_gen_bags || 0}</td>
                 <td>{grandTotals.total_rec_bags || 0}</td>
-                <td>{((grandTotals.total_gen_weight || 0) - (grandTotals.total_rec_weight || 0)).toFixed(3)}</td>
+                <td>{((grandTotals.total_rec_weight || 0) - (grandTotals.total_gen_weight || 0)).toFixed(3)}</td>
               </tr>
             </tfoot>
           )}
@@ -171,7 +171,7 @@ export default function Reports() {
       }
 
       // Fetch bags for these hospitals in date range
-      let bQuery = supabase.from('bags').select('hospital_id, hospital_name, category, weight, status, created_at, received_at');
+      let bQuery = supabase.from('bags').select('hospital_id, hospital_name, category, weight, received_weight, status, created_at, received_at');
       bQuery = bQuery.in('hospital_id', hcfs.map(h => h.id));
       bQuery = bQuery.gte('created_at', startDate).lte('created_at', endDate);
       if (filters.category) bQuery = bQuery.eq('category', filters.category);
@@ -195,9 +195,9 @@ export default function Reports() {
         row.total_gen_weight += (b.weight || 0);
         if (b.status === 'received' || b.status === 'in_batch' || b.status === 'treated') {
           row[cat].rec_bags++;
-          row[cat].rec_weight += (b.weight || 0);
+          row[cat].rec_weight += (b.received_weight || b.weight || 0);
           row.total_rec_bags++;
-          row.total_rec_weight += (b.weight || 0);
+          row.total_rec_weight += (b.received_weight || b.weight || 0);
         }
       });
 

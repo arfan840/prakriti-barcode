@@ -8,6 +8,11 @@ export default function PlantGateScan() {
   const [verifyingBag, setVerifyingBag] = useState(null);
   const [actualWeight, setActualWeight] = useState('');
   const [btLoading, setBtLoading] = useState(false);
+  const [scanned, setScanned] = useState([]);
+  const [scanning, setScanning] = useState(false);
+  const [error, setError] = useState('');
+  const [manualCode, setManualCode] = useState('');
+  const [confirming, setConfirming] = useState(false);
   const scannerInstanceRef = useRef(null);
   const scannedRef = useRef([]);
   const processingRef = useRef(false);

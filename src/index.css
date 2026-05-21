@@ -1253,6 +1253,11 @@ a:hover { color: var(--accent-primary-hover); }
     padding: 6px 8px;
   }
 
+  #printable-report .data-table th.cat-yellow { background: #fef08a !important; color: #854d0e !important; }
+  #printable-report .data-table th.cat-red { background: #fca5a5 !important; color: #991b1b !important; }
+  #printable-report .data-table th.cat-blue { background: #93c5fd !important; color: #1e3a8a !important; }
+  #printable-report .data-table th.cat-white { background: #f1f5f9 !important; color: #334155 !important; }
+
   #printable-report .data-table td {
     font-size: 8pt;
     padding: 5px 8px;
