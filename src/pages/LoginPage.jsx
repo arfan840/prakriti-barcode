@@ -25,27 +25,43 @@ export default function LoginPage() {
            const { data: signupData, error: signUpError } = await supabase.auth.signUp({ email, password });
            if (signUpError || !signupData?.user) throw err;
 
-           let autoRole = 'plant_head';
-           if (email.includes('driver')) autoRole = 'driver';
-           else if (email.includes('manager')) autoRole = 'plant_manager';
-           else if (email.includes('authority')) autoRole = 'regulatory';
+            let autoRole = 'plant_head';
+            let hospitalId = null;
+            if (email.includes('driver')) autoRole = 'driver';
+            else if (email.includes('manager')) autoRole = 'plant_manager';
+            else if (email.includes('authority')) autoRole = 'regulatory';
+            else if (email.includes('hcf')) {
+              autoRole = 'hcf';
+              const hcfMatch = email.match(/hcf(\d+)/i);
+              if (hcfMatch) {
+                const code = `HCF${hcfMatch[1].padStart(4, '0')}`;
+                const { data: hosp } = await supabase.from('hospitals').select('id').eq('hcf_code', code).maybeSingle();
+                if (hosp) hospitalId = hosp.id;
+              }
+              if (!hospitalId) {
+                const { data: hosps } = await supabase.from('hospitals').select('id').limit(1);
+                if (hosps && hosps.length > 0) hospitalId = hosps[0].id;
+              }
+            }
 
-           await supabase.from('profiles').insert({
-              id: signupData.user.id,
-              name: email.split('@')[0],
-              email: email,
-              role: autoRole,
-              phone: '1234567890'
-           });
-           
-           user = { role: autoRole };
-        } else {
-           throw err;
-        }
+            await supabase.from('profiles').insert({
+               id: signupData.user.id,
+               name: email.split('@')[0],
+               email: email,
+               role: autoRole,
+               phone: '1234567890',
+               hospital_id: hospitalId
+            });
+            
+            user = { role: autoRole, hospital_id: hospitalId };
+         } else {
+            throw err;
+         }
       }
 
       if (user?.role === 'driver') navigate('/driver');
       else if (user?.role === 'plant_manager' || user?.role === 'manager') navigate('/plant');
+      else if (user?.role === 'hcf') navigate('/hcf');
       else navigate('/admin');
       
     } catch (err) {
@@ -109,6 +125,9 @@ export default function LoginPage() {
             </span>
             <span onClick={() => quickLogin('manager@prakrititrack.in', 'manager123')} style={{ cursor: 'pointer' }}>
               🔑 Manager: <code>manager@prakrititrack.in</code> / <code>manager123</code>
+            </span>
+            <span onClick={() => quickLogin('hcf0001@prakrititrack.in', 'hcf123')} style={{ cursor: 'pointer' }}>
+              🔑 HCF Staff: <code>hcf0001@prakrititrack.in</code> / <code>hcf123</code>
             </span>
             <span onClick={() => quickLogin('driver1@prakrititrack.in', 'driver123')} style={{ cursor: 'pointer' }}>
               🔑 Driver: <code>driver1@prakrititrack.in</code> / <code>driver123</code>

@@ -12,10 +12,17 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('plant_head', 'plant_manager', 'driver', 'regulatory')),
+  role TEXT NOT NULL CHECK (role IN ('plant_head', 'plant_manager', 'driver', 'regulatory', 'hcf')),
   phone TEXT,
+  hospital_id UUID REFERENCES public.hospitals(id),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure columns and constraints exist if profiles was created previously
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('plant_head', 'plant_manager', 'driver', 'regulatory', 'hcf'));
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS hospital_id UUID REFERENCES public.hospitals(id);
+
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations for authenticated users on profiles" ON public.profiles;
 CREATE POLICY "Allow all operations for authenticated users on profiles" ON public.profiles FOR ALL USING (auth.role() = 'authenticated');

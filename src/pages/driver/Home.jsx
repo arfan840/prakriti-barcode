@@ -109,8 +109,11 @@ export default function DriverHome() {
   };
 
   const lookupBag = async (code) => {
-    const { data, error: err } = await supabase.from('bags').select('*, hospitals(name)').eq('barcode', code).single();
+    const { data, error: err } = await supabase.from('bags').select('*, hospitals(name, beds)').eq('barcode', code).single();
     if (err || !data) return showError(`Not found: ${code}`);
+    if (data.hospitals?.beds > 30) {
+      return showError(`⚠️ HCF "${data.hospitals?.name}" has ${data.hospitals?.beds} beds (>30). Scanning & dispatch must be performed by the HCF staff.`);
+    }
     if (data.status !== 'created') return showError(`Bag already ${data.status}`);
     setScannedBag(data);
     triggerBluetoothWeigh(); // Auto trigger imaginary bluetooth scale

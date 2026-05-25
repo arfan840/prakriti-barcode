@@ -62,6 +62,18 @@ const navConfig = {
         ]
       }
     ]
+  },
+  hcf: {
+    title: 'HCF Portal',
+    sections: [
+      {
+        title: 'HCF Operations',
+        items: [
+          { path: '/hcf', icon: '🏥', label: 'Dashboard', end: true },
+          { path: '/hcf/scan', icon: '📷', label: 'Dispatch Waste' },
+        ]
+      }
+    ]
   }
 };
 
@@ -80,6 +92,7 @@ export default function AppLayout({ module }) {
     { path: '/admin', label: 'Admin', roles: ['plant_head', 'plant_manager', 'regulatory'] },
     { path: '/plant', label: 'Plant', roles: ['plant_head', 'plant_manager'] },
     { path: '/driver', label: 'Driver', roles: ['driver'] },
+    { path: '/hcf', label: 'HCF Portal', roles: ['hcf'] },
   ].filter(m => m.roles.includes(user?.role));
 
   return (

@@ -22,6 +22,8 @@ import DriverCheckin from './pages/driver/Checkin';
 import DriverWeigh from './pages/driver/Weigh';
 import DriverManifest from './pages/driver/Manifest';
 import DriverSync from './pages/driver/Sync';
+import HcfDashboard from './pages/hcf/Dashboard';
+import HcfScan from './pages/hcf/Scan';
 import AppLayout from './components/AppLayout';
 
 function ProtectedRoute({ children, roles }) {
@@ -39,6 +41,7 @@ function AppRoutes() {
     if (!user) return '/login';
     if (user.role === 'driver') return '/driver';
     if (user.role === 'plant_manager') return '/plant';
+    if (user.role === 'hcf') return '/hcf';
     return '/admin';
   };
 
@@ -77,6 +80,12 @@ function AppRoutes() {
         <Route path="weigh" element={<DriverWeigh />} />
         <Route path="manifest" element={<DriverManifest />} />
         <Route path="sync" element={<DriverSync />} />
+      </Route>
+
+      {/* HCF Routes */}
+      <Route path="/hcf" element={<ProtectedRoute roles={['hcf']}><AppLayout module="hcf" /></ProtectedRoute>}>
+        <Route index element={<HcfDashboard />} />
+        <Route path="scan" element={<HcfScan />} />
       </Route>
     </Routes>
   );

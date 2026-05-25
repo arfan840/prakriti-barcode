@@ -52,8 +52,12 @@ export default function DriverScan() {
 
   const lookupBag = async (bagId) => {
     setError(''); setScannedBag(null);
-    const { data, error: err } = await supabase.from('bags').select('*, hospitals(name, district)').eq('barcode', bagId).single();
+    const { data, error: err } = await supabase.from('bags').select('*, hospitals(name, district, beds)').eq('barcode', bagId).single();
     if (err || !data) { setError(`Bag not found: ${bagId}`); return; }
+    if (data.hospitals?.beds > 30) {
+      setError(`⚠️ HCF "${data.hospitals.name}" has ${data.hospitals.beds} beds (>30). Scanning & dispatch must be performed by the HCF staff.`);
+      return;
+    }
     if (data.status === 'collected') { setError(`Bag ${bagId} already collected.`); return; }
     if (data.status !== 'created') { setError(`Bag ${bagId} is in status "${data.status}" — cannot collect.`); return; }
     setScannedBag(data);

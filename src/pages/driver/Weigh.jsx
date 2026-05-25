@@ -14,8 +14,12 @@ export default function DriverWeigh() {
   const lookupBag = async (code) => {
     const bagId = parseQRPayload(code) || code;
     setError(''); setBag(null); setSuccess('');
-    const { data, error: err } = await supabase.from('bags').select('*').eq('barcode', bagId).single();
+    const { data, error: err } = await supabase.from('bags').select('*, hospitals(name, beds)').eq('barcode', bagId).single();
     if (err || !data) { setError(`Bag not found: ${bagId}`); return; }
+    if (data.hospitals?.beds > 30) {
+      setError(`⚠️ HCF "${data.hospitals?.name}" has ${data.hospitals?.beds} beds (>30). Scanning & dispatch must be performed by the HCF staff.`);
+      return;
+    }
     setBag(data);
     setWeight(data.weight ? String(data.weight) : '');
   };
