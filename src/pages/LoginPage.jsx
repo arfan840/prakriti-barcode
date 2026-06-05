@@ -19,19 +19,12 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const [btMode, setBtMode] = useState(() => localStorage.getItem('btMode') || 'simulated');
   const [scaleConnected, setScaleConnected] = useState(false);
   const [scaleDeviceName, setScaleDeviceName] = useState('');
   const [scaleWeight, setScaleWeight] = useState('0.000');
   const [btLoading, setBtLoading] = useState(false);
   const [btStatus, setBtStatus] = useState('');
   const [btError, setBtError] = useState('');
-
-  const handleBtModeChange = (mode) => {
-    setBtMode(mode);
-    localStorage.setItem('btMode', mode);
-    resetConnection();
-  };
 
   const resetConnection = () => {
     disconnectActiveDevice();
@@ -49,82 +42,45 @@ export default function LoginPage() {
       const name = getConnectedDeviceName();
       setScaleDeviceName(name);
       setBtStatus('Scale connected.');
-      if (btMode === 'real') {
-        connectBluetoothScale(
-          (val) => setScaleWeight(val),
-          (err) => {
-            setScaleConnected(false);
-            setBtError(err.message || String(err));
-          },
-          (statusText) => setBtStatus(statusText)
-        );
-      }
+      connectBluetoothScale(
+        (val) => setScaleWeight(val),
+        (err) => {
+          setScaleConnected(false);
+          setBtError(err.message || String(err));
+        },
+        (statusText) => setBtStatus(statusText)
+      );
     }
   }, []);
 
-  useEffect(() => {
-    let interval = null;
-    if (scaleConnected && btMode === 'simulated') {
-      interval = setInterval(() => {
-        simulateWeightFetch(
-          (val) => {
-            setScaleWeight(val);
-            setBtStatus('✅ Simulated weight updated.');
-          },
-          () => {},
-          () => {}
-        );
-      }, 5000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [scaleConnected, btMode]);
-
   const handleConnectScale = async () => {
     setBtError('');
-    if (btMode === 'real') {
-      if (!isWebBluetoothSupported()) {
-        setBtError('Web Bluetooth is not supported in this browser. Use Simulation mode.');
-        return;
-      }
-      setBtLoading(true);
-      setBtStatus('Initializing Bluetooth...');
-      connectBluetoothScale(
-        (val) => {
-          setScaleWeight(val);
-          setBtStatus('✅ Weight received successfully!');
-        },
-        (err) => {
-          setBtLoading(false);
-          setBtStatus('');
-          setBtError(err.message || String(err));
-          setScaleConnected(false);
-        },
-        (statusText) => {
-          setBtStatus(statusText);
-          if (statusText.includes('Connected') || statusText.includes('Awaiting')) {
-            setScaleConnected(true);
-            setScaleDeviceName(getConnectedDeviceName());
-            setBtLoading(false);
-          }
-        }
-      );
-    } else {
-      setBtLoading(true);
-      setBtStatus('Connecting to simulated scale...');
-      setTimeout(() => {
-        setScaleConnected(true);
-        setScaleDeviceName('Simulated Bluetooth Scale v1.0');
-        setBtLoading(false);
-        setBtStatus('✅ Connected to Simulated Scale.');
-        simulateWeightFetch(
-          (val) => setScaleWeight(val),
-          () => {},
-          () => {}
-        );
-      }, 1000);
+    if (!isWebBluetoothSupported()) {
+      setBtError('Web Bluetooth is not supported in this browser. Localhost or HTTPS is required.');
+      return;
     }
+    setBtLoading(true);
+    setBtStatus('Initializing Bluetooth...');
+    connectBluetoothScale(
+      (val) => {
+        setScaleWeight(val);
+        setBtStatus('✅ Weight received successfully!');
+      },
+      (err) => {
+        setBtLoading(false);
+        setBtStatus('');
+        setBtError(err.message || String(err));
+        setScaleConnected(false);
+      },
+      (statusText) => {
+        setBtStatus(statusText);
+        if (statusText.includes('Connected') || statusText.includes('Awaiting')) {
+          setScaleConnected(true);
+          setScaleDeviceName(getConnectedDeviceName());
+          setBtLoading(false);
+        }
+      }
+    );
   };
 
   const handleSubmit = async (e) => {
@@ -192,6 +148,8 @@ export default function LoginPage() {
     setPassword(password);
   };
 
+  const showScaleSetup = email.toLowerCase().includes('driver') || email.toLowerCase().includes('hcf');
+
   return (
     <div className="login-page">
       <div className="login-card slide-up">
@@ -233,88 +191,67 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div style={{ margin: '24px 0 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ flex: 1, height: 1, background: 'var(--border-color)' }}></div>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>📶 Weighing Scale Setup</span>
-          <div style={{ flex: 1, height: 1, background: 'var(--border-color)' }}></div>
-        </div>
-
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.02)',
-          border: '1px solid var(--border-color)',
-          borderRadius: 'var(--radius-lg)',
-          padding: 16,
-          textAlign: 'center',
-          backdropFilter: 'blur(10px)',
-          transition: 'all var(--transition-base)',
-          marginBottom: 16
-        }} className="scale-setup-panel">
-          <div style={{ display: 'flex', gap: 12, fontSize: '0.8rem', justifyContent: 'center', marginBottom: 12 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: btMode === 'real' ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: btMode === 'real' ? 600 : 400 }}>
-              <input 
-                type="radio" 
-                name="login-bt-mode" 
-                value="real" 
-                checked={btMode === 'real'} 
-                onChange={() => handleBtModeChange('real')} 
-                style={{ cursor: 'pointer', accentColor: 'var(--accent-primary)' }}
-              />
-              🔌 Real (BLE)
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: btMode === 'simulated' ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: btMode === 'simulated' ? 600 : 400 }}>
-              <input 
-                type="radio" 
-                name="login-bt-mode" 
-                value="simulated" 
-                checked={btMode === 'simulated'} 
-                onChange={() => handleBtModeChange('simulated')} 
-                style={{ cursor: 'pointer', accentColor: 'var(--accent-primary)' }}
-              />
-              🧪 Simulation
-            </label>
-          </div>
-
-          {scaleConnected ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: 'var(--accent-success)', fontWeight: 600 }}>
-                <span className="pulse-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-success)', display: 'inline-block', boxShadow: '0 0 8px var(--accent-success)' }}></span>
-                Connected to {scaleDeviceName}
-              </div>
-              <div style={{ fontSize: '2rem', fontFamily: 'monospace', fontWeight: 800, color: 'var(--text-primary)', margin: '8px 0', textShadow: '0 0 10px rgba(255,255,255,0.1)' }}>
-                {scaleWeight} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>kg</span>
-              </div>
-              <button onClick={resetConnection} className="btn btn-secondary btn-sm" style={{ width: '100%', borderRadius: 12, justifyContent: 'center' }}>
-                ✕ Disconnect Scale
-              </button>
+        {showScaleSetup && (
+          <>
+            <div style={{ margin: '24px 0 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ flex: 1, height: 1, background: 'var(--border-color)' }}></div>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>📶 Weighing Scale Setup</span>
+              <div style={{ flex: 1, height: 1, background: 'var(--border-color)' }}></div>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button 
-                onClick={handleConnectScale} 
-                className="btn btn-secondary btn-sm" 
-                style={{ width: '100%', borderRadius: 12, justifyContent: 'center', border: '1px solid var(--border-color)' }}
-                disabled={btLoading}
-              >
-                {btLoading ? '⏳ Connecting...' : '📶 Pair & Connect Scale'}
-              </button>
-              {btStatus && (
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  {btStatus}
+
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 16,
+              textAlign: 'center',
+              backdropFilter: 'blur(10px)',
+              transition: 'all var(--transition-base)',
+              marginBottom: 16
+            }} className="scale-setup-panel">
+              {scaleConnected ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: 'var(--accent-success)', fontWeight: 600 }}>
+                    <span className="pulse-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-success)', display: 'inline-block', boxShadow: '0 0 8px var(--accent-success)' }}></span>
+                    Connected to {scaleDeviceName}
+                  </div>
+                  <div style={{ fontSize: '2rem', fontFamily: 'monospace', fontWeight: 800, color: 'var(--text-primary)', margin: '8px 0', textShadow: '0 0 10px rgba(255,255,255,0.1)' }}>
+                    {scaleWeight} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>kg</span>
+                  </div>
+                  <button onClick={resetConnection} className="btn btn-secondary btn-sm" style={{ width: '100%', borderRadius: 12, justifyContent: 'center' }}>
+                    ✕ Disconnect Scale
+                  </button>
                 </div>
-              )}
-              {btError && (
-                <div style={{ fontSize: '0.75rem', color: 'var(--accent-danger)', background: 'rgba(239, 68, 68, 0.05)', padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(239, 68, 68, 0.1)' }}>
-                  {btError}
-                </div>
-              )}
-              {btMode === 'real' && !isWebBluetoothSupported() && (
-                <div style={{ fontSize: '0.72rem', color: 'var(--accent-warning)', background: 'rgba(197, 151, 91, 0.05)', padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(197, 151, 91, 0.1)' }}>
-                  ⚠️ Browser Web Bluetooth unsupported (requires HTTPS or localhost).
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <button 
+                    onClick={handleConnectScale} 
+                    className="btn btn-secondary btn-sm" 
+                    style={{ width: '100%', borderRadius: 12, justifyContent: 'center', border: '1px solid var(--border-color)' }}
+                    disabled={btLoading}
+                  >
+                    {btLoading ? '⏳ Connecting...' : '📶 Pair & Connect Scale'}
+                  </button>
+                  {btStatus && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {btStatus}
+                    </div>
+                  )}
+                  {btError && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--accent-danger)', background: 'rgba(239, 68, 68, 0.05)', padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                      {btError}
+                    </div>
+                  )}
+                  {!isWebBluetoothSupported() && (
+                    <div style={{ fontSize: '0.72rem', color: 'var(--accent-warning)', background: 'rgba(197, 151, 91, 0.05)', padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(197, 151, 91, 0.1)' }}>
+                      ⚠️ Browser Web Bluetooth unsupported (requires HTTPS or localhost).
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
+          </>
+        )}
 
         <div className="login-demo">
           <strong>Demo Credentials (click to fill):</strong>
