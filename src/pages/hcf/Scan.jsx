@@ -15,7 +15,7 @@ export default function HcfScan() {
   const [manualCode, setManualCode] = useState('');
   const [weight, setWeight] = useState('');
   const [btLoading, setBtLoading] = useState(false);
-  const [btMode, setBtMode] = useState('simulated');
+  const [btMode, setBtMode] = useState(() => localStorage.getItem('btMode') || 'simulated');
   const [btStatus, setBtStatus] = useState('');
 
   const [status, setStatus] = useState('');
@@ -350,7 +350,7 @@ export default function HcfScan() {
                       name="bt-mode-hcf" 
                       value="real" 
                       checked={btMode === 'real'} 
-                      onChange={() => { setBtMode('real'); setBtStatus(''); }} 
+                      onChange={() => { setBtMode('real'); localStorage.setItem('btMode', 'real'); setBtStatus(''); }} 
                     />
                     🔌 Real (BLE)
                   </label>
@@ -360,7 +360,7 @@ export default function HcfScan() {
                       name="bt-mode-hcf" 
                       value="simulated" 
                       checked={btMode === 'simulated'} 
-                      onChange={() => { setBtMode('simulated'); setBtStatus(''); }} 
+                      onChange={() => { setBtMode('simulated'); localStorage.setItem('btMode', 'simulated'); setBtStatus(''); }} 
                     />
                     🧪 Simulation
                   </label>

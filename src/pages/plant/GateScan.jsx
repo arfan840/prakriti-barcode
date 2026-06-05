@@ -9,7 +9,7 @@ export default function PlantGateScan() {
   const [verifyingBag, setVerifyingBag] = useState(null);
   const [actualWeight, setActualWeight] = useState('');
   const [btLoading, setBtLoading] = useState(false);
-  const [btMode, setBtMode] = useState('simulated');
+  const [btMode, setBtMode] = useState(() => localStorage.getItem('btMode') || 'simulated');
   const [btStatus, setBtStatus] = useState('');
   const [scanned, setScanned] = useState([]);
   const [scanning, setScanning] = useState(false);
@@ -259,7 +259,7 @@ export default function PlantGateScan() {
                       name="bt-mode-gate" 
                       value="real" 
                       checked={btMode === 'real'} 
-                      onChange={() => { setBtMode('real'); setBtStatus(''); }} 
+                      onChange={() => { setBtMode('real'); localStorage.setItem('btMode', 'real'); setBtStatus(''); }} 
                     />
                     🔌 Real (BLE)
                   </label>
@@ -269,7 +269,7 @@ export default function PlantGateScan() {
                       name="bt-mode-gate" 
                       value="simulated" 
                       checked={btMode === 'simulated'} 
-                      onChange={() => { setBtMode('simulated'); setBtStatus(''); }} 
+                      onChange={() => { setBtMode('simulated'); localStorage.setItem('btMode', 'simulated'); setBtStatus(''); }} 
                     />
                     🧪 Simulation
                   </label>

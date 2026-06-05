@@ -16,6 +16,20 @@ export const isWebBluetoothSupported = () => {
 };
 
 /**
+ * Checks if a scale is currently connected.
+ */
+export const isScaleConnected = () => {
+  return !!(activeDevice && activeDevice.gatt && activeDevice.gatt.connected);
+};
+
+/**
+ * Gets the name of the currently connected scale device.
+ */
+export const getConnectedDeviceName = () => {
+  return activeDevice ? (activeDevice.name || 'Weighing Scale') : '';
+};
+
+/**
  * Disconnects the active Bluetooth device connection if one exists.
  */
 export const disconnectActiveDevice = () => {
@@ -25,7 +39,7 @@ export const disconnectActiveDevice = () => {
     } catch (_) {}
     activeCharacteristic = null;
   }
-  if (activeDevice && activeDevice.gatt.connected) {
+  if (activeDevice && activeDevice.gatt && activeDevice.gatt.connected) {
     activeDevice.gatt.disconnect();
     console.log('Bluetooth device disconnected successfully.');
   }
@@ -130,8 +144,24 @@ export const connectBluetoothScale = async (onWeightReceived, onError, onStatusU
   currentOnWeightReceived = onWeightReceived;
   currentOnError = onError;
 
-  // Make sure we clear any previous connection first
-  disconnectActiveDevice();
+  // Reuse existing connection if active
+  if (activeDevice && activeDevice.gatt && activeDevice.gatt.connected && activeCharacteristic) {
+    onStatusUpdate(`Using connected scale "${activeDevice.name || 'Weighing Scale'}"`);
+    try {
+      try {
+        activeCharacteristic.removeEventListener('characteristicvaluechanged', handleCharacteristicValueChanged);
+      } catch (_) {}
+      activeCharacteristic.addEventListener('characteristicvaluechanged', handleCharacteristicValueChanged);
+      onStatusUpdate('Awaiting weight reading...');
+      return;
+    } catch (err) {
+      console.warn('Failed to reuse active characteristic, reconnecting...', err);
+      disconnectActiveDevice();
+    }
+  } else {
+    // Clear any half-open/stale connection
+    disconnectActiveDevice();
+  }
 
   try {
     onStatusUpdate('Requesting Bluetooth device...');

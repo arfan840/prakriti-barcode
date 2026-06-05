@@ -18,7 +18,7 @@ export default function DriverHome() {
   const [manualCode, setManualCode] = useState('');
   const [weight, setWeight] = useState('');
   const [btLoading, setBtLoading] = useState(false);
-  const [btMode, setBtMode] = useState('simulated');
+  const [btMode, setBtMode] = useState(() => localStorage.getItem('btMode') || 'simulated');
   const [btStatus, setBtStatus] = useState('');
   const [globalError, setGlobalError] = useState('');
   const [globalSuccess, setGlobalSuccess] = useState('');
@@ -288,7 +288,7 @@ export default function DriverHome() {
                           name="bt-mode-driver" 
                           value="real" 
                           checked={btMode === 'real'} 
-                          onChange={() => { setBtMode('real'); setBtStatus(''); }} 
+                          onChange={() => { setBtMode('real'); localStorage.setItem('btMode', 'real'); setBtStatus(''); }} 
                         />
                         🔌 Real (BLE)
                       </label>
@@ -298,7 +298,7 @@ export default function DriverHome() {
                           name="bt-mode-driver" 
                           value="simulated" 
                           checked={btMode === 'simulated'} 
-                          onChange={() => { setBtMode('simulated'); setBtStatus(''); }} 
+                          onChange={() => { setBtMode('simulated'); localStorage.setItem('btMode', 'simulated'); setBtStatus(''); }} 
                         />
                         🧪 Simulation
                       </label>
