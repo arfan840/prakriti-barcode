@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { parseQRPayload } from '../../lib/qrGenerator';
+import { isWebBluetoothSupported, connectBluetoothScale, simulateWeightFetch, disconnectActiveDevice } from '../../lib/bluetoothScale';
 
 export default function PlantGateScan() {
   const { supabase, user } = useAuth();
@@ -8,6 +9,8 @@ export default function PlantGateScan() {
   const [verifyingBag, setVerifyingBag] = useState(null);
   const [actualWeight, setActualWeight] = useState('');
   const [btLoading, setBtLoading] = useState(false);
+  const [btMode, setBtMode] = useState('simulated');
+  const [btStatus, setBtStatus] = useState('');
   const [scanned, setScanned] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState('');
@@ -19,6 +22,12 @@ export default function PlantGateScan() {
 
   // Sync state to ref so closure always has latest
   React.useEffect(() => { scannedRef.current = scanned; }, [scanned]);
+
+  React.useEffect(() => {
+    return () => {
+      disconnectActiveDevice();
+    };
+  }, []);
 
   const processCode = async (rawCode) => {
     if (processingRef.current) return;
@@ -55,11 +64,36 @@ export default function PlantGateScan() {
   };
 
   const triggerBluetoothWeigh = () => {
-    setBtLoading(true);
-    setTimeout(() => {
-      setActualWeight((Math.random() * 4 + 1).toFixed(3));
-      setBtLoading(false);
-    }, 1200);
+    if (isWebBluetoothSupported() && btMode === 'real') {
+      setBtLoading(true);
+      setBtStatus('Initializing Bluetooth...');
+      connectBluetoothScale(
+        (val) => {
+          setActualWeight(val);
+          setBtLoading(false);
+          setBtStatus('✅ Weight received successfully!');
+        },
+        (err) => {
+          setBtLoading(false);
+          setBtStatus(`❌ Bluetooth Error: ${err.message || err}`);
+        },
+        (statusText) => {
+          setBtStatus(`📶 ${statusText}`);
+        }
+      );
+    } else {
+      setBtLoading(true);
+      setBtStatus('Reading simulated scale...');
+      simulateWeightFetch(
+        (val) => {
+          setActualWeight(val);
+          setBtLoading(false);
+          setBtStatus('✅ Simulated weight fetched.');
+        },
+        () => setBtLoading(true),
+        () => setBtLoading(false)
+      );
+    }
   };
 
   const confirmVerifiedBag = () => {
@@ -210,12 +244,44 @@ export default function PlantGateScan() {
                 className="btn btn-secondary" 
                 onClick={triggerBluetoothWeigh} 
                 disabled={btLoading}
-                style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 16px' }}
+                style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 16px', minWidth: 80 }}
               >
                 <span style={{ fontSize: '1.2rem' }}>{btLoading ? '⏳' : '📶'}</span>
-                <span style={{ fontSize: '0.6rem' }}>Scale</span>
+                <span style={{ fontSize: '0.6rem' }}>{btMode === 'real' ? 'BLE Scale' : 'Scale'}</span>
               </button>
             </div>
+            {isWebBluetoothSupported() ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 12, fontSize: '0.8rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontWeight: btMode === 'real' ? 600 : 400 }}>
+                    <input 
+                      type="radio" 
+                      name="bt-mode-gate" 
+                      value="real" 
+                      checked={btMode === 'real'} 
+                      onChange={() => { setBtMode('real'); setBtStatus(''); }} 
+                    />
+                    🔌 Real (BLE)
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontWeight: btMode === 'simulated' ? 600 : 400 }}>
+                    <input 
+                      type="radio" 
+                      name="bt-mode-gate" 
+                      value="simulated" 
+                      checked={btMode === 'simulated'} 
+                      onChange={() => { setBtMode('simulated'); setBtStatus(''); }} 
+                    />
+                    🧪 Simulation
+                  </label>
+                </div>
+                {btStatus && <span style={{ fontSize: '0.75rem', color: btStatus.includes('❌') ? '#ef4444' : btStatus.includes('✅') ? 'var(--accent-green)' : 'var(--text-muted)' }}>{btStatus}</span>}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Weight is fetched from simulated Bluetooth scale or input manually.</span>
+                {btStatus && <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>{btStatus}</span>}
+              </div>
+            )}
             {actualWeight && (
               <div style={{ marginTop: 8, fontSize: '0.85rem', color: Math.abs(parseFloat(actualWeight) - verifyingBag.weight) > 0.1 ? '#ef4444' : 'var(--accent-green)', fontWeight: 600 }}>
                 Difference: {(parseFloat(actualWeight) - verifyingBag.weight).toFixed(3)} kg

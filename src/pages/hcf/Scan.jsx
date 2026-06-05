@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { parseQRPayload } from '../../lib/qrGenerator';
+import { isWebBluetoothSupported, connectBluetoothScale, simulateWeightFetch, disconnectActiveDevice } from '../../lib/bluetoothScale';
 
 export default function HcfScan() {
   const { supabase, user } = useAuth();
@@ -14,6 +15,8 @@ export default function HcfScan() {
   const [manualCode, setManualCode] = useState('');
   const [weight, setWeight] = useState('');
   const [btLoading, setBtLoading] = useState(false);
+  const [btMode, setBtMode] = useState('simulated');
+  const [btStatus, setBtStatus] = useState('');
 
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
@@ -30,6 +33,11 @@ export default function HcfScan() {
       .then(({ data }) => {
         if (data) setActiveRoutes(data);
       });
+
+    // Cleanup BT connection on unmount
+    return () => {
+      disconnectActiveDevice();
+    };
   }, [supabase]);
 
   const showSuccess = (msg) => { setStatus(msg); setError(''); setTimeout(() => setStatus(''), 4000); };
@@ -117,11 +125,36 @@ export default function HcfScan() {
   };
 
   const triggerBluetoothWeigh = () => {
-    setBtLoading(true);
-    setTimeout(() => {
-      setWeight((Math.random() * 4 + 1).toFixed(3));
-      setBtLoading(false);
-    }, 1200);
+    if (isWebBluetoothSupported() && btMode === 'real') {
+      setBtLoading(true);
+      setBtStatus('Initializing Bluetooth...');
+      connectBluetoothScale(
+        (val) => {
+          setWeight(val);
+          setBtLoading(false);
+          setBtStatus('✅ Weight received successfully!');
+        },
+        (err) => {
+          setBtLoading(false);
+          setBtStatus(`❌ Bluetooth Error: ${err.message || err}`);
+        },
+        (statusText) => {
+          setBtStatus(`📶 ${statusText}`);
+        }
+      );
+    } else {
+      setBtLoading(true);
+      setBtStatus('Reading simulated scale...');
+      simulateWeightFetch(
+        (val) => {
+          setWeight(val);
+          setBtLoading(false);
+          setBtStatus('✅ Simulated weight fetched.');
+        },
+        () => setBtLoading(true),
+        () => setBtLoading(false)
+      );
+    }
   };
 
   const confirmDispatch = async () => {
@@ -300,16 +333,46 @@ export default function HcfScan() {
                 className="btn btn-secondary" 
                 onClick={triggerBluetoothWeigh} 
                 disabled={btLoading} 
-                style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 12px' }}
+                style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 12px', minWidth: 80 }}
                 type="button"
               >
                 <span style={{ fontSize: '1.1rem' }}>{btLoading ? '⏳' : '📶'}</span>
-                <span style={{ fontSize: '0.65rem' }}>Scale Weigh</span>
+                <span style={{ fontSize: '0.65rem' }}>{btMode === 'real' ? 'BLE Scale' : 'Scale Weigh'}</span>
               </button>
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 8 }}>
-              Auto fetch weight from mock Bluetooth weighing scale or input manually.
-            </div>
+            
+            {isWebBluetoothSupported() ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 12, fontSize: '0.8rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontWeight: btMode === 'real' ? 600 : 400 }}>
+                    <input 
+                      type="radio" 
+                      name="bt-mode-hcf" 
+                      value="real" 
+                      checked={btMode === 'real'} 
+                      onChange={() => { setBtMode('real'); setBtStatus(''); }} 
+                    />
+                    🔌 Real (BLE)
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontWeight: btMode === 'simulated' ? 600 : 400 }}>
+                    <input 
+                      type="radio" 
+                      name="bt-mode-hcf" 
+                      value="simulated" 
+                      checked={btMode === 'simulated'} 
+                      onChange={() => { setBtMode('simulated'); setBtStatus(''); }} 
+                    />
+                    🧪 Simulation
+                  </label>
+                </div>
+                {btStatus && <span style={{ fontSize: '0.75rem', color: btStatus.includes('❌') ? '#ef4444' : btStatus.includes('✅') ? 'var(--accent-green)' : 'var(--text-muted)' }}>{btStatus}</span>}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Auto fetch weight via simulated scale or input manually.</span>
+                {btStatus && <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>{btStatus}</span>}
+              </div>
+            )}
           </div>
 
           {/* Action buttons */}

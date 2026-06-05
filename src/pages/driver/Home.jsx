@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { parseQRPayload } from '../../lib/qrGenerator';
+import { isWebBluetoothSupported, connectBluetoothScale, simulateWeightFetch, disconnectActiveDevice } from '../../lib/bluetoothScale';
 
 export default function DriverHome() {
   const { supabase, user } = useAuth();
@@ -17,6 +18,8 @@ export default function DriverHome() {
   const [manualCode, setManualCode] = useState('');
   const [weight, setWeight] = useState('');
   const [btLoading, setBtLoading] = useState(false);
+  const [btMode, setBtMode] = useState('simulated');
+  const [btStatus, setBtStatus] = useState('');
   const [globalError, setGlobalError] = useState('');
   const [globalSuccess, setGlobalSuccess] = useState('');
 
@@ -40,7 +43,12 @@ export default function DriverHome() {
     }
   };
 
-  useEffect(() => { if (user) load(); }, [user, supabase]);
+  useEffect(() => {
+    if (user) load();
+    return () => {
+      disconnectActiveDevice();
+    };
+  }, [user, supabase]);
 
   const showSuccess = (msg) => { setGlobalSuccess(msg); setGlobalError(''); setTimeout(() => setGlobalSuccess(''), 4000); };
   const showError = (msg) => { setGlobalError(msg); setGlobalSuccess(''); setTimeout(() => setGlobalError(''), 5000); };
@@ -120,11 +128,36 @@ export default function DriverHome() {
   };
 
   const triggerBluetoothWeigh = () => {
-    setBtLoading(true);
-    setTimeout(() => {
-      setWeight((Math.random() * 4 + 1).toFixed(3));
-      setBtLoading(false);
-    }, 1200);
+    if (isWebBluetoothSupported() && btMode === 'real') {
+      setBtLoading(true);
+      setBtStatus('Initializing Bluetooth...');
+      connectBluetoothScale(
+        (val) => {
+          setWeight(val);
+          setBtLoading(false);
+          setBtStatus('✅ Weight received successfully!');
+        },
+        (err) => {
+          setBtLoading(false);
+          setBtStatus(`❌ Bluetooth Error: ${err.message || err}`);
+        },
+        (statusText) => {
+          setBtStatus(`📶 ${statusText}`);
+        }
+      );
+    } else {
+      setBtLoading(true);
+      setBtStatus('Reading simulated scale...');
+      simulateWeightFetch(
+        (val) => {
+          setWeight(val);
+          setBtLoading(false);
+          setBtStatus('✅ Simulated weight fetched.');
+        },
+        () => setBtLoading(true),
+        () => setBtLoading(false)
+      );
+    }
   };
 
   const confirmCollection = async () => {
@@ -241,12 +274,43 @@ export default function DriverHome() {
                 <label className="form-label">⚖️ Weight (kg)</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input className="form-input" type="number" step="0.001" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.000" style={{ fontSize: '1.5rem', textAlign: 'center', fontWeight: 700, flex: 1 }} />
-                  <button className="btn btn-secondary" onClick={triggerBluetoothWeigh} disabled={btLoading} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 12px' }}>
+                  <button className="btn btn-secondary" onClick={triggerBluetoothWeigh} disabled={btLoading} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 12px', minWidth: 80 }}>
                     <span style={{ fontSize: '1.1rem' }}>{btLoading ? '⏳' : '📶'}</span>
-                    <span style={{ fontSize: '0.65rem' }}>Auto fetch</span>
+                    <span style={{ fontSize: '0.65rem' }}>{btMode === 'real' ? 'BLE Scale' : 'Auto fetch'}</span>
                   </button>
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 8 }}>Weight is fetched from Bluetooth machine. You can edit manually.</div>
+                {isWebBluetoothSupported() ? (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                    <div style={{ display: 'flex', gap: 12, fontSize: '0.8rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontWeight: btMode === 'real' ? 600 : 400 }}>
+                        <input 
+                          type="radio" 
+                          name="bt-mode-driver" 
+                          value="real" 
+                          checked={btMode === 'real'} 
+                          onChange={() => { setBtMode('real'); setBtStatus(''); }} 
+                        />
+                        🔌 Real (BLE)
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontWeight: btMode === 'simulated' ? 600 : 400 }}>
+                        <input 
+                          type="radio" 
+                          name="bt-mode-driver" 
+                          value="simulated" 
+                          checked={btMode === 'simulated'} 
+                          onChange={() => { setBtMode('simulated'); setBtStatus(''); }} 
+                        />
+                        🧪 Simulation
+                      </label>
+                    </div>
+                    {btStatus && <span style={{ fontSize: '0.75rem', color: btStatus.includes('❌') ? '#ef4444' : btStatus.includes('✅') ? 'var(--accent-green)' : 'var(--text-muted)' }}>{btStatus}</span>}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Weight is fetched from simulated Bluetooth scale or input manually.</span>
+                    {btStatus && <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>{btStatus}</span>}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
