@@ -143,11 +143,6 @@ export default function LoginPage() {
     }
   };
 
-  const quickLogin = (email, password) => {
-    setEmail(email);
-    setPassword(password);
-  };
-
   const showScaleSetup = email.toLowerCase().includes('driver') || email.toLowerCase().includes('hcf');
 
   return (
@@ -253,26 +248,7 @@ export default function LoginPage() {
           </>
         )}
 
-        <div className="login-demo">
-          <strong>Demo Credentials (click to fill):</strong>
-          <div style={{ display: 'grid', gap: '6px', marginTop: '8px' }}>
-            <span onClick={() => quickLogin('admin@prakrititrack.in', 'admin123')} style={{ cursor: 'pointer' }}>
-              🔑 Plant Head: <code>admin@prakrititrack.in</code> / <code>admin123</code>
-            </span>
-            <span onClick={() => quickLogin('manager@prakrititrack.in', 'manager123')} style={{ cursor: 'pointer' }}>
-              🔑 Manager: <code>manager@prakrititrack.in</code> / <code>manager123</code>
-            </span>
-            <span onClick={() => quickLogin('hcf0001@prakrititrack.in', 'hcf123')} style={{ cursor: 'pointer' }}>
-              🔑 HCF Staff: <code>hcf0001@prakrititrack.in</code> / <code>hcf123</code>
-            </span>
-            <span onClick={() => quickLogin('driver1@prakrititrack.in', 'driver123')} style={{ cursor: 'pointer' }}>
-              🔑 Driver: <code>driver1@prakrititrack.in</code> / <code>driver123</code>
-            </span>
-            <span onClick={() => quickLogin('authority@prakrititrack.in', 'authority123')} style={{ cursor: 'pointer' }}>
-              🔑 Regulatory: <code>authority@prakrititrack.in</code> / <code>authority123</code>
-            </span>
-          </div>
-        </div>
+
       </div>
     </div>
   );

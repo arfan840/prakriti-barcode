@@ -1,78 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-
-function generateCertificateHTML(batch, treatedBy) {
-  const certNum = `CERT-${batch.id?.slice(0, 8).toUpperCase()}-${new Date().getFullYear()}`;
-  const date = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
-
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Disposal Certificate — ${certNum}</title>
-      <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 40px; color: #111; }
-        .border { border: 3px double #1a5276; padding: 30px; border-radius: 4px; }
-        .header { text-align: center; border-bottom: 2px solid #1a5276; padding-bottom: 20px; margin-bottom: 24px; }
-        .logo { font-size: 32px; margin-bottom: 8px; }
-        h1 { font-size: 20px; color: #1a5276; margin: 4px 0; }
-        h2 { font-size: 14px; color: #333; margin: 4px 0; font-weight: normal; }
-        .cert-title { font-size: 18px; font-weight: 700; color: #1a5276; margin: 20px 0 16px; text-align: center; text-transform: uppercase; letter-spacing: 2px; }
-        .body-text { font-size: 13px; line-height: 1.8; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
-        th { background: #1a5276; color: white; padding: 8px 12px; text-align: left; }
-        td { padding: 8px 12px; border-bottom: 1px solid #ddd; }
-        tr:nth-child(even) td { background: #f7f9fb; }
-        .sig-row { display: flex; justify-content: space-between; margin-top: 40px; }
-        .sig-box { text-align: center; width: 45%; }
-        .sig-line { border-top: 1px solid #333; margin-top: 50px; padding-top: 6px; font-size: 12px; color: #555; }
-        .cert-num { font-size: 11px; color: #888; text-align: right; margin-top: 20px; }
-        @media print { body { padding: 10mm; } .border { border: 3px double #1a5276; } }
-      </style>
-    </head>
-    <body>
-      <div class="border">
-        <div class="header">
-          <div class="logo">☣️</div>
-          <h1>Prakriti Track Pvt. Ltd.</h1>
-          <h2>Common Bio-Medical Waste Treatment Facility (CBWTF)</h2>
-          <h2>Jharkhand, India</h2>
-        </div>
-        <div class="cert-title">Certificate of Biomedical Waste Disposal</div>
-        <div class="body-text">
-          This is to certify that the following consignment of biomedical waste has been received and treated in accordance with the
-          <strong>Bio-Medical Waste Management Rules, 2016</strong> and subsequent amendments issued by the Ministry of Environment,
-          Forest and Climate Change, Government of India.
-        </div>
-        <table>
-          <tr><th>Detail</th><th>Value</th></tr>
-          <tr><td>Certificate Number</td><td><strong>${certNum}</strong></td></tr>
-          <tr><td>Batch Number</td><td>${batch.batch_number}</td></tr>
-          <tr><td>Treatment Method</td><td>${batch.treatment_type || 'Autoclave'}</td></tr>
-          <tr><td>Number of Bags Treated</td><td>${batch.bag_count}</td></tr>
-          <tr><td>Total Weight Treated</td><td>${batch.total_weight} kg</td></tr>
-          <tr><td>Date of Treatment</td><td>${date}</td></tr>
-          <tr><td>Treated By (Operator)</td><td>${treatedBy || batch.operator || '—'}</td></tr>
-        </table>
-        <div class="body-text" style="font-size:12px; color:#555; margin-top:16px;">
-          The above biomedical waste has been rendered non-infectious and disposed of in an environmentally sound manner.
-          This certificate is issued as per JSPCB authorization and applicable regulations.
-        </div>
-        <div class="sig-row">
-          <div class="sig-box">
-            <div class="sig-line">Treatment Plant Operator</div>
-          </div>
-          <div class="sig-box">
-            <div class="sig-line">Plant Head / Authorized Signatory</div>
-          </div>
-        </div>
-        <div class="cert-num">Cert No: ${certNum} · Generated: ${new Date().toLocaleString('en-IN')}</div>
-      </div>
-      <script>window.onload = function() { setTimeout(function() { window.print(); }, 400); };</script>
-    </body>
-    </html>
-  `;
-}
+import { generateCertificateHTML } from '../../lib/certificate';
 
 export default function PlantTreatment() {
   const { supabase, user } = useAuth();
@@ -121,7 +49,23 @@ export default function PlantTreatment() {
   };
 
   const printCert = () => {
-    const html = generateCertificateHTML(selected, user?.name);
+    // Calculate category wise breakdown from bags
+    const categoryBreakdown = {
+      Yellow: { count: 0, weight: 0 },
+      Red: { count: 0, weight: 0 },
+      White: { count: 0, weight: 0 },
+      Blue: { count: 0, weight: 0 }
+    };
+    
+    bags.forEach(bag => {
+      const cat = bag.category;
+      if (categoryBreakdown[cat]) {
+        categoryBreakdown[cat].count += 1;
+        categoryBreakdown[cat].weight += (Number(bag.weight) || 0);
+      }
+    });
+
+    const html = generateCertificateHTML(selected, user?.name, categoryBreakdown);
     const w = window.open('', '_blank', 'width=900,height=700');
     w.document.write(html);
     w.document.close();

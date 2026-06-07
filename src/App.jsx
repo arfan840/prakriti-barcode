@@ -86,6 +86,7 @@ function AppRoutes() {
       <Route path="/hcf" element={<ProtectedRoute roles={['hcf']}><AppLayout module="hcf" /></ProtectedRoute>}>
         <Route index element={<HcfDashboard />} />
         <Route path="scan" element={<HcfScan />} />
+        <Route path="certificates" element={<AdminCertificates />} />
       </Route>
     </Routes>
   );

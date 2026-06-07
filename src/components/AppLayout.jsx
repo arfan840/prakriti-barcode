@@ -71,6 +71,7 @@ const navConfig = {
         items: [
           { path: '/hcf', icon: '🏥', label: 'Dashboard', end: true },
           { path: '/hcf/scan', icon: '📷', label: 'Dispatch Waste' },
+          { path: '/hcf/certificates', icon: '📜', label: 'Certificates' },
         ]
       }
     ]

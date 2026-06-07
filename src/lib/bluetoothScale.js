@@ -167,12 +167,7 @@ export const connectBluetoothScale = async (onWeightReceived, onError, onStatusU
     onStatusUpdate('Requesting Bluetooth device...');
     
     const device = await navigator.bluetooth.requestDevice({
-      filters: [
-        { services: [WEIGHT_SCALE_SERVICE_UUID] },
-        { services: [NUS_SERVICE_UUID] },
-        { services: [FFF0_SERVICE_UUID] },
-        { services: [FFE0_SERVICE_UUID] }
-      ],
+      acceptAllDevices: true,
       optionalServices: [
         WEIGHT_SCALE_SERVICE_UUID,
         NUS_SERVICE_UUID,
