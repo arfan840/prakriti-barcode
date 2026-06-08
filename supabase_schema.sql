@@ -14,14 +14,14 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   email TEXT UNIQUE NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('plant_head', 'plant_manager', 'driver', 'regulatory', 'hcf')),
   phone TEXT,
-  hospital_id UUID REFERENCES public.hospitals(id),
+  hospital_id UUID REFERENCES public.hospitals(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Ensure columns and constraints exist if profiles was created previously
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('plant_head', 'plant_manager', 'driver', 'regulatory', 'hcf'));
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS hospital_id UUID REFERENCES public.hospitals(id);
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS hospital_id UUID REFERENCES public.hospitals(id) ON DELETE SET NULL;
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations for authenticated users on profiles" ON public.profiles;
@@ -101,7 +101,7 @@ CREATE POLICY "Allow all operations for authenticated users on routes" ON public
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.bag_sequence (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  hcf_id UUID REFERENCES public.hospitals(id),
+  hcf_id UUID REFERENCES public.hospitals(id) ON DELETE CASCADE,
   date_str TEXT NOT NULL,           -- YYYYMMDD
   seq INTEGER DEFAULT 0,
   UNIQUE(hcf_id, date_str)
@@ -138,7 +138,7 @@ CREATE POLICY "Allow all operations for authenticated users on batches" ON publi
 CREATE TABLE IF NOT EXISTS public.bags (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   barcode TEXT UNIQUE NOT NULL,     -- The bag_id string e.g. JH-DGH-HCF0001-Y-20250509-000001
-  hospital_id UUID REFERENCES public.hospitals(id),
+  hospital_id UUID REFERENCES public.hospitals(id) ON DELETE CASCADE,
   hospital_name TEXT NOT NULL,
   hcf_code TEXT,
   district TEXT,
@@ -203,7 +203,7 @@ CREATE TABLE IF NOT EXISTS public.manifests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   route_id UUID REFERENCES public.routes(id),
   driver_id UUID REFERENCES public.profiles(id),
-  hospital_id UUID REFERENCES public.hospitals(id),
+  hospital_id UUID REFERENCES public.hospitals(id) ON DELETE CASCADE,
   hospital_name TEXT,
   bag_count INTEGER DEFAULT 0,
   yellow_count INTEGER DEFAULT 0,
