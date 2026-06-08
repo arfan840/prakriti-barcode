@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS public.vehicles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   number TEXT UNIQUE NOT NULL,
   type TEXT DEFAULT 'Van',
-  driver_id UUID REFERENCES public.profiles(id),
+  driver_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   status TEXT DEFAULT 'active',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -78,7 +78,7 @@ CREATE POLICY "Allow all operations for authenticated users on vehicles" ON publ
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.routes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  driver_id UUID REFERENCES public.profiles(id),
+  driver_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   driver_name TEXT,
   vehicle_id UUID REFERENCES public.vehicles(id),
   date TIMESTAMPTZ DEFAULT NOW(),
@@ -148,9 +148,9 @@ CREATE TABLE IF NOT EXISTS public.bags (
   status TEXT NOT NULL DEFAULT 'created',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   collected_at TIMESTAMPTZ,
-  collected_by UUID REFERENCES public.profiles(id),
+  collected_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   received_at TIMESTAMPTZ,
-  received_by UUID REFERENCES public.profiles(id),
+  received_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   gps_lat NUMERIC(10, 6),
   gps_lng NUMERIC(10, 6),
   route_id UUID REFERENCES public.routes(id),
@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS public.scan_events (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   bag_id UUID REFERENCES public.bags(id),
   barcode TEXT,
-  scanned_by UUID REFERENCES public.profiles(id),
+  scanned_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   scanner_name TEXT,
   scan_type TEXT NOT NULL CHECK (scan_type IN ('collection', 'gate_in', 'treatment', 'audit')),
   weight NUMERIC(10, 2),
@@ -202,7 +202,7 @@ CREATE POLICY "Allow all operations for authenticated users on scan_events" ON p
 CREATE TABLE IF NOT EXISTS public.manifests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   route_id UUID REFERENCES public.routes(id),
-  driver_id UUID REFERENCES public.profiles(id),
+  driver_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   hospital_id UUID REFERENCES public.hospitals(id) ON DELETE CASCADE,
   hospital_name TEXT,
   bag_count INTEGER DEFAULT 0,
@@ -236,7 +236,7 @@ CREATE TABLE IF NOT EXISTS public.discrepancies (
   route_id UUID REFERENCES public.routes(id),
   status TEXT DEFAULT 'open',
   resolution TEXT,
-  resolved_by UUID REFERENCES public.profiles(id),
+  resolved_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   resolved_at TIMESTAMPTZ
 );
@@ -254,7 +254,7 @@ CREATE POLICY "Allow all operations for authenticated users on discrepancies" ON
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.audit_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES public.profiles(id),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   user_name TEXT,
   action TEXT NOT NULL,
   entity TEXT NOT NULL,
