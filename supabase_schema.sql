@@ -173,7 +173,7 @@ CREATE POLICY "Allow all operations for authenticated users on bags" ON public.b
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.scan_events (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  bag_id UUID REFERENCES public.bags(id),
+  bag_id UUID REFERENCES public.bags(id) ON DELETE CASCADE,
   barcode TEXT,
   scanned_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   scanner_name TEXT,
@@ -229,7 +229,7 @@ CREATE POLICY "Allow all operations for authenticated users on manifests" ON pub
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.discrepancies (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  bag_id UUID REFERENCES public.bags(id),
+  bag_id UUID REFERENCES public.bags(id) ON DELETE CASCADE,
   barcode TEXT,
   type TEXT NOT NULL,
   description TEXT,
