@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import Logo from '../components/Logo';
 import { 
   isWebBluetoothSupported, 
   connectBluetoothScale, 
@@ -148,10 +149,9 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card slide-up">
-        <div className="login-logo">
-          <div className="login-logo-icon">☣️</div>
-          <h1>Prakriti<span>Track</span></h1>
-          <p>Biomedical Waste Management System</p>
+        <div className="login-logo" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
+          <Logo height={56} showText={true} />
+          <p style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Biomedical Waste Management System</p>
         </div>
 
         {error && <div className="login-error">{error}</div>}

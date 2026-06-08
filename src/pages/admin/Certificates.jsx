@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { generateCertificateHTML } from '../../lib/certificate';
+import Logo from '../../components/Logo';
 
 export default function Certificates() {
   const { supabase, user } = useAuth();
@@ -169,10 +170,10 @@ export default function Certificates() {
               </div>
             </div>
             <div className="certificate">
-              <div className="certificate-header">
-                <h1>☣️ Prakriti Track</h1>
-                <h1>Certificate of Treatment</h1>
-                <p>Biomedical Waste Management Facility</p>
+              <div className="certificate-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, borderBottom: '3px double #1a1a2e', paddingBottom: 20, marginBottom: 24 }}>
+                <Logo height={48} showText={true} />
+                <h1 style={{ marginTop: 8, fontSize: '1.4rem', color: '#1a1a2e' }}>Certificate of Treatment</h1>
+                <p style={{ margin: '4px 0 0 0', color: '#666', fontSize: '0.9rem' }}>Biomedical Waste Management Facility</p>
               </div>
               <div className="certificate-body">
                 <p>This is to certify that the biomedical waste described below has been <strong>treated and disposed of</strong> in accordance with the Biomedical Waste Management Rules.</p>

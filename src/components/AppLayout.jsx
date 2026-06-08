@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Logo from './Logo';
 
 const navConfig = {
   admin: {
@@ -100,9 +101,8 @@ export default function AppLayout({ module }) {
     <div className="app-layout">
       {sidebarOpen && <div className="sidebar-overlay active" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-brand">
-          <div className="sidebar-brand-icon">☣️</div>
-          <div className="sidebar-brand-text">Prakriti<span>Track</span></div>
+        <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', padding: '16px 20px' }}>
+          <Logo height={32} showText={true} />
         </div>
 
         {config.sections.map((section, si) => (
