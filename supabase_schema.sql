@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS public.routes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   driver_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   driver_name TEXT,
-  vehicle_id UUID REFERENCES public.vehicles(id),
+  vehicle_id UUID REFERENCES public.vehicles(id) ON DELETE SET NULL,
   date TIMESTAMPTZ DEFAULT NOW(),
   vehicle_number TEXT,
   status TEXT DEFAULT 'active',
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS public.routes (
 
 -- Ensure columns exist if the table was created previously
 ALTER TABLE public.routes ADD COLUMN IF NOT EXISTS driver_name TEXT;
-ALTER TABLE public.routes ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES public.vehicles(id);
+ALTER TABLE public.routes ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES public.vehicles(id) ON DELETE SET NULL;
 ALTER TABLE public.routes ADD COLUMN IF NOT EXISTS vehicle_number TEXT;
 
 ALTER TABLE public.routes ENABLE ROW LEVEL SECURITY;
@@ -153,16 +153,16 @@ CREATE TABLE IF NOT EXISTS public.bags (
   received_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   gps_lat NUMERIC(10, 6),
   gps_lng NUMERIC(10, 6),
-  route_id UUID REFERENCES public.routes(id),
-  batch_id UUID REFERENCES public.batches(id)
+  route_id UUID REFERENCES public.routes(id) ON DELETE SET NULL,
+  batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL
 );
 
 -- Ensure columns exist if the table was created previously
 ALTER TABLE public.bags ADD COLUMN IF NOT EXISTS hcf_code TEXT;
 ALTER TABLE public.bags ADD COLUMN IF NOT EXISTS district TEXT;
 ALTER TABLE public.bags ADD COLUMN IF NOT EXISTS state TEXT DEFAULT 'JH';
-ALTER TABLE public.bags ADD COLUMN IF NOT EXISTS route_id UUID REFERENCES public.routes(id);
-ALTER TABLE public.bags ADD COLUMN IF NOT EXISTS batch_id UUID REFERENCES public.batches(id);
+ALTER TABLE public.bags ADD COLUMN IF NOT EXISTS route_id UUID REFERENCES public.routes(id) ON DELETE SET NULL;
+ALTER TABLE public.bags ADD COLUMN IF NOT EXISTS batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL;
 
 ALTER TABLE public.bags ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all operations for authenticated users on bags" ON public.bags;
@@ -181,15 +181,15 @@ CREATE TABLE IF NOT EXISTS public.scan_events (
   weight NUMERIC(10, 2),
   gps_lat NUMERIC(10, 6),
   gps_lng NUMERIC(10, 6),
-  vehicle_id UUID REFERENCES public.vehicles(id),
-  route_id UUID REFERENCES public.routes(id),
+  vehicle_id UUID REFERENCES public.vehicles(id) ON DELETE SET NULL,
+  route_id UUID REFERENCES public.routes(id) ON DELETE SET NULL,
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Ensure columns exist if the table was created previously
-ALTER TABLE public.scan_events ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES public.vehicles(id);
-ALTER TABLE public.scan_events ADD COLUMN IF NOT EXISTS route_id UUID REFERENCES public.routes(id);
+ALTER TABLE public.scan_events ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES public.vehicles(id) ON DELETE SET NULL;
+ALTER TABLE public.scan_events ADD COLUMN IF NOT EXISTS route_id UUID REFERENCES public.routes(id) ON DELETE SET NULL;
 ALTER TABLE public.scan_events ADD COLUMN IF NOT EXISTS scanner_name TEXT;
 
 ALTER TABLE public.scan_events ENABLE ROW LEVEL SECURITY;
@@ -201,7 +201,7 @@ CREATE POLICY "Allow all operations for authenticated users on scan_events" ON p
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.manifests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  route_id UUID REFERENCES public.routes(id),
+  route_id UUID REFERENCES public.routes(id) ON DELETE CASCADE,
   driver_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   hospital_id UUID REFERENCES public.hospitals(id) ON DELETE CASCADE,
   hospital_name TEXT,
@@ -217,7 +217,7 @@ CREATE TABLE IF NOT EXISTS public.manifests (
 );
 
 -- Ensure columns exist if the table was created previously
-ALTER TABLE public.manifests ADD COLUMN IF NOT EXISTS route_id UUID REFERENCES public.routes(id);
+ALTER TABLE public.manifests ADD COLUMN IF NOT EXISTS route_id UUID REFERENCES public.routes(id) ON DELETE CASCADE;
 ALTER TABLE public.manifests ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
 
 ALTER TABLE public.manifests ENABLE ROW LEVEL SECURITY;
@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS public.discrepancies (
   barcode TEXT,
   type TEXT NOT NULL,
   description TEXT,
-  route_id UUID REFERENCES public.routes(id),
+  route_id UUID REFERENCES public.routes(id) ON DELETE SET NULL,
   status TEXT DEFAULT 'open',
   resolution TEXT,
   resolved_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
@@ -242,7 +242,7 @@ CREATE TABLE IF NOT EXISTS public.discrepancies (
 );
 
 -- Ensure columns exist if the table was created previously
-ALTER TABLE public.discrepancies ADD COLUMN IF NOT EXISTS route_id UUID REFERENCES public.routes(id);
+ALTER TABLE public.discrepancies ADD COLUMN IF NOT EXISTS route_id UUID REFERENCES public.routes(id) ON DELETE SET NULL;
 ALTER TABLE public.discrepancies ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
 
 ALTER TABLE public.discrepancies ENABLE ROW LEVEL SECURITY;
